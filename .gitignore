@@ -1,0 +1,10 @@
+#github
+passwd
+
+# KDevelop
+*.kdev4
+
+# Compiled Object files
+*.o
+
+# Application files
