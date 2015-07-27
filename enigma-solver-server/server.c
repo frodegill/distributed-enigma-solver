@@ -19,7 +19,9 @@
 #define REFLECTOR_COUNT (2) //B and C
 #define RING_COUNT (8)//I, II, III, IV, V, VI, VII and VIII
 #define PACKET_COUNT (REFLECTOR_COUNT*RING_COUNT*(RING_COUNT-1)*(RING_COUNT-2))
-
+#define LEFT (0)
+#define MIDDLE (1)
+#define RIGHT (2)
 
 #ifdef DEFAULT_PORT_AS_INT
 # define DEFAULT_PORT     (((('E'-'A')*26*26*26*26*26 + \
@@ -52,11 +54,52 @@ std::string g_max_plaintext;
 
 char* g_recv_buffer;
 
-struct PacketInfo {
-	int m_packet;
+
+struct PacketInfo
+{
+	int m_packet_number;
+	int m_reflector;
+	int m_rings[3];
+
+	PacketInfo() {m_packet_number = 0;
+	              m_reflector = 0;
+	              m_rings[LEFT] = m_rings[MIDDLE] = m_rings[RIGHT] = 0;}
+
+	int ToInt() const {return m_reflector*RING_COUNT*RING_COUNT*RING_COUNT+
+	                          m_rings[LEFT]*RING_COUNT*RING_COUNT+
+	                          m_rings[MIDDLE]*RING_COUNT+
+	                          m_rings[RIGHT];}
+
+	void Increment() {
+		m_packet_number++;
+		
+		bool invalid = true;
+		while (invalid)
+		{
+			if (RING_COUNT <= ++m_rings[RIGHT])
+			{
+				m_rings[RIGHT] = 0;
+				if (RING_COUNT <= ++m_rings[MIDDLE])
+				{
+					m_rings[MIDDLE] = 0;
+					if (RING_COUNT <= ++m_rings[LEFT])
+					{
+						m_rings[MIDDLE] = 0;
+						m_reflector++;
+					}
+				}
+			}
+			invalid = (m_rings[LEFT]==m_rings[MIDDLE] || m_rings[MIDDLE]==m_rings[RIGHT] || m_rings[LEFT]==m_rings[RIGHT]);
+		}
+	}
+};
+
+struct PendingPacketInfo
+{
+	int m_reflector_and_rings_settings;
 	time_t m_start_time;
 };
-std::list<PacketInfo> g_packets;
+std::list<PendingPacketInfo> g_pending_packets;
 
 
 bool ReadWordlist(const char* wordlist_filename)
@@ -203,69 +246,70 @@ bool SendBuffer(int client_fd, const char* buffer, size_t buffer_length)
 	return true;
 }
 
-int FindPendingPacket()
+int FindPendingPacketInfo()
 {
 	time_t find_time = time(NULL) - MAX_CALC_TIME_SEC;
-	for (std::list<PacketInfo>::iterator iter = g_packets.begin(); iter != g_packets.end(); ++iter)
+	for (std::list<PendingPacketInfo>::iterator iter = g_pending_packets.begin(); iter != g_pending_packets.end(); ++iter)
 	{
-		PacketInfo packet_info = *iter;
+		PendingPacketInfo packet_info = *iter;
 		if (find_time > packet_info.m_start_time)
 		{
-			return packet_info.m_packet;
+			return packet_info.m_reflector_and_rings_settings;
 		}
 	}
 	return NOT_FOUND;
 }
 
-void RemovePendingPacket(int packet)
+void RemovePendingPacketInfo(int reflector_and_rings_settings)
 {
-	for (std::list<PacketInfo>::iterator iter = g_packets.begin(); iter != g_packets.end(); ++iter)
+	for (std::list<PendingPacketInfo>::iterator iter = g_pending_packets.begin(); iter != g_pending_packets.end(); ++iter)
 	{
-		PacketInfo packet_info = *iter;
-		if (packet == packet_info.m_packet)
+		PendingPacketInfo pending_packet_info = *iter;
+		if (reflector_and_rings_settings == pending_packet_info.m_reflector_and_rings_settings)
 		{
-			g_packets.erase(iter);
+			g_pending_packets.erase(iter);
 			break;
 		}
 	}
 }
 
-void RegisterPacket(int packet)
+void RegisterPendingPacketInfo(int reflector_and_rings_settings)
 {
 	time_t current_time = time(NULL);
-	for (std::list<PacketInfo>::iterator iter = g_packets.begin(); iter != g_packets.end(); ++iter)
+	for (std::list<PendingPacketInfo>::iterator iter = g_pending_packets.begin(); iter != g_pending_packets.end(); ++iter)
 	{
-		PacketInfo packet_info = *iter;
-		if (packet == packet_info.m_packet)
+		PendingPacketInfo pending_packet_info = *iter;
+		if (reflector_and_rings_settings == pending_packet_info.m_reflector_and_rings_settings)
 		{
-			packet_info.m_start_time = current_time;
+			pending_packet_info.m_start_time = current_time;
 			return;
 		}
 	}
 
-	PacketInfo packet_info;
-	packet_info.m_packet = packet;
-	packet_info.m_start_time = current_time;
-	g_packets.push_back(packet_info);
+	PendingPacketInfo pending_packet_info;
+	pending_packet_info.m_reflector_and_rings_settings = reflector_and_rings_settings;
+	pending_packet_info.m_start_time = current_time;
+	g_pending_packets.push_back(pending_packet_info);
 }
 
-void SendPacket(int& packet, int client_fd)
+void SendPacket(PacketInfo& packet, int client_fd)
 {
-	int client_packet = FindPendingPacket();
-	if (NOT_FOUND == client_packet)
+	int reflector_and_rings_settings = FindPendingPacketInfo();
+	if (NOT_FOUND == reflector_and_rings_settings)
 	{
-		client_packet = packet++;
+		packet.Increment();
+		reflector_and_rings_settings = packet.ToInt();
 	}
 
-	if (PACKET_COUNT <= client_packet)
+	if (PACKET_COUNT <= packet.m_packet_number)
 	{
 		SendBuffer(client_fd, "DONE", 4);
 	}
 	else
 	{
-		sprintf(g_recv_buffer, "PACKET %d\r\n", client_packet);
+		sprintf(g_recv_buffer, "SETTING %d\r\n", reflector_and_rings_settings);
 		if (!SendBuffer(client_fd, g_recv_buffer, strlen(g_recv_buffer))) return;
-		RegisterPacket(client_packet);
+		RegisterPendingPacketInfo(reflector_and_rings_settings);
 	}
 }
 
@@ -339,7 +383,7 @@ bool ParseString(int client_fd, char*& g_recv_buffer, size_t& buffer_pos, std::s
 	return found_result;
 }
 
-void HandleClient(int& packet, int client_fd)
+void HandleClient(PacketInfo& packet_info, int client_fd)
 {
 	int received_bytes = recv(client_fd, g_recv_buffer, RECV_BUFFER_LENGTH, DEFAULT_RECV_FLAGS);
 	if (-1 == received_bytes) return;
@@ -348,10 +392,10 @@ void HandleClient(int& packet, int client_fd)
 	
 	if (EQUAL == strncmp("STATUS", g_recv_buffer, 6))
 	{
-		sprintf(g_recv_buffer, "PROGRESS %d/%d\r\n", packet, PACKET_COUNT);
+		sprintf(g_recv_buffer, "PROGRESS %d/%d\r\n", packet_info.m_packet_number, PACKET_COUNT);
 		if (!SendBuffer(client_fd, g_recv_buffer, strlen(g_recv_buffer))) return;
 
-		int client_count = g_packets.size();
+		int client_count = g_pending_packets.size();
 		sprintf(g_recv_buffer, "CLIENTS %d\r\n", client_count);
 		if (!SendBuffer(client_fd, g_recv_buffer, strlen(g_recv_buffer))) return;
 
@@ -379,14 +423,14 @@ void HandleClient(int& packet, int client_fd)
 		if (!SendBuffer(client_fd, g_encrypted_text.c_str(), g_encrypted_text.length())) return;
 		if (!SendBuffer(client_fd, "\r\n", 2)) return;
 
-		SendPacket(packet, client_fd);
+		SendPacket(packet_info, client_fd);
 	}
-	else if (EQUAL == strncmp("DONE ", g_recv_buffer, 5)) //"DONE <packet> <score> <ring/key-settings> <plugboard> <plaintext>"
+	else if (EQUAL == strncmp("DONE ", g_recv_buffer, 5)) //"DONE <setting> <score> <ring/key-settings> <plugboard> <plaintext>"
 	{
 		size_t buffer_pos = 5;
-		int client_packet;
-		if (!ParseInt(client_fd, g_recv_buffer, buffer_pos, client_packet)) return;
-		RemovePendingPacket(client_packet);
+		int reflector_and_rings_settings;
+		if (!ParseInt(client_fd, g_recv_buffer, buffer_pos, reflector_and_rings_settings)) return;
+		RemovePendingPacketInfo(reflector_and_rings_settings);
 		
 		int client_score;
 		if (!ParseInt(client_fd, g_recv_buffer, buffer_pos, client_score)) return;
@@ -400,23 +444,23 @@ void HandleClient(int& packet, int client_fd)
 			fprintf(stdout, "New high: %d %d %s %s\n", g_max_score, g_max_ring_key_settings, g_max_plugboard.c_str(), g_max_plaintext.c_str());
 		}
 
-		SendPacket(packet, client_fd);
+		SendPacket(packet_info, client_fd);
 	}
 
 }
 
 void MainLoop(int socket_fd)
 {
-	int packet = 0;
-	while (PACKET_COUNT > packet)
+	PacketInfo packet_info;
+	while (PACKET_COUNT > packet_info.m_packet_number)
 	{
 		//Wait for content/connections
 		struct sockaddr_storage their_addr;
 		socklen_t addr_size = sizeof their_addr;
-		fprintf(stdout, "Waiting...(%d/%d)\n", packet, PACKET_COUNT);
+		fprintf(stdout, "Waiting...(%d/%d)\n", packet_info.m_packet_number, PACKET_COUNT);
 
 		int client_fd = accept(socket_fd, (struct sockaddr*)&their_addr, &addr_size);
-		HandleClient(packet, client_fd);
+		HandleClient(packet_info, client_fd);
 		close(client_fd);
 	}
 }
