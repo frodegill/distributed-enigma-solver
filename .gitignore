@@ -8,5 +8,5 @@ passwd
 *.o
 
 # Application files
-enigma-solver-client/enigma-solver-client
-enigma-solver-server/enigma-solver-server
+enigma-solver-client
+enigma-solver-server
