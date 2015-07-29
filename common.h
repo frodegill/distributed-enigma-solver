@@ -10,7 +10,8 @@
 
 
 #define REFLECTOR_COUNT (2) //B and C
-#define RING_COUNT (8)//I, II, III, IV, V, VI, VII and VIII
+#define ROTOR_COUNT (3) //M3
+#define RING_COUNT (8) //I, II, III, IV, V, VI, VII and VIII (Navy M3 1939+)
 #define PACKET_COUNT (REFLECTOR_COUNT*RING_COUNT*(RING_COUNT-1)*(RING_COUNT-2))
 #define LEFT (0)
 #define MIDDLE (1)
@@ -47,6 +48,6 @@ struct PacketInfo
 
 bool SendBuffer(int socket_fd, const char* buffer, size_t buffer_length);
 
-void SkipWhitespace(int socket_fd, char*& network_buffer, size_t& buffer_pos);
+void SkipCharacter(int socket_fd, char ch, char*& network_buffer, size_t& buffer_pos);
 bool ParseInt(int socket_fd, char*& network_buffer, size_t& buffer_pos, int& result);
 bool ParseString(int socket_fd, char*& network_buffer, size_t& buffer_pos, std::string& result);

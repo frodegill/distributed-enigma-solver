@@ -230,7 +230,7 @@ void SendPacket(PacketInfo& packet, int client_fd)
 	}
 	else
 	{
-		sprintf(g_network_buffer, "SETTING %d\r\n", reflector_and_rings_settings);
+		sprintf(g_network_buffer, "SETTING %d\n", reflector_and_rings_settings);
 		if (!SendBuffer(client_fd, g_network_buffer, strlen(g_network_buffer))) return;
 		RegisterPendingPacketInfo(reflector_and_rings_settings);
 	}
@@ -245,36 +245,36 @@ void HandleClient(PacketInfo& packet_info, int client_fd)
 	
 	if (EQUAL == strncmp("STATUS", g_network_buffer, 6))
 	{
-		sprintf(g_network_buffer, "PROGRESS %d/%d\r\n", packet_info.m_packet_number, PACKET_COUNT);
+		sprintf(g_network_buffer, "PROGRESS %d/%d\n", packet_info.m_packet_number, PACKET_COUNT);
 		if (!SendBuffer(client_fd, g_network_buffer, strlen(g_network_buffer))) return;
 
 		int client_count = g_pending_packets.size();
-		sprintf(g_network_buffer, "CLIENTS %d\r\n", client_count);
+		sprintf(g_network_buffer, "CLIENTS %d\n", client_count);
 		if (!SendBuffer(client_fd, g_network_buffer, strlen(g_network_buffer))) return;
 
-		sprintf(g_network_buffer, "MAX_SCORE %d\r\n", g_max_score);
+		sprintf(g_network_buffer, "MAX_SCORE %d\n", g_max_score);
 		if (!SendBuffer(client_fd, g_network_buffer, strlen(g_network_buffer))) return;
 
-		sprintf(g_network_buffer, "MAX_RING_KEY %d\r\n", g_max_ring_key_settings);
+		sprintf(g_network_buffer, "MAX_RING_KEY %d\n", g_max_ring_key_settings);
 		if (!SendBuffer(client_fd, g_network_buffer, strlen(g_network_buffer))) return;
 
 		if (!SendBuffer(client_fd, "MAX_PLUGBOARD ", 14)) return;
 		if (!SendBuffer(client_fd, g_max_plugboard.c_str(), g_max_plugboard.length())) return;
-		if (!SendBuffer(client_fd, "\r\n", 2)) return;
+		if (!SendBuffer(client_fd, "\n", 1)) return;
 
 		if (!SendBuffer(client_fd, "MAX_PLAINTEXT ", 14)) return;
 		if (!SendBuffer(client_fd, g_max_plaintext.c_str(), g_max_plaintext.length())) return;
-		if (!SendBuffer(client_fd, "\r\n", 2)) return;
+		if (!SendBuffer(client_fd, "\n", 1)) return;
 	}
 	else if (EQUAL == strncmp("NEW", g_network_buffer, 3))
 	{
 		if (!SendBuffer(client_fd, "WORDS ", 6)) return;
 		if (!SendBuffer(client_fd, g_words.c_str(), g_words.length())) return;
-		if (!SendBuffer(client_fd, "\r\n", 2)) return;
+		if (!SendBuffer(client_fd, "\n", 1)) return;
 
 		if (!SendBuffer(client_fd, "TEXT ", 5)) return;
 		if (!SendBuffer(client_fd, g_encrypted_text.c_str(), g_encrypted_text.length())) return;
-		if (!SendBuffer(client_fd, "\r\n", 2)) return;
+		if (!SendBuffer(client_fd, "\n", 1)) return;
 
 		SendPacket(packet_info, client_fd);
 	}

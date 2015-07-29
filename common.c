@@ -63,7 +63,7 @@ bool SendBuffer(int socket_fd, const char* buffer, size_t buffer_length)
 	return true;
 }
 
-void SkipWhitespace(int socket_fd, char*& network_buffer, size_t& buffer_pos)
+void SkipCharacter(int socket_fd, char ch, char*& network_buffer, size_t& buffer_pos)
 {
 	while (true)
 	{
@@ -76,7 +76,7 @@ void SkipWhitespace(int socket_fd, char*& network_buffer, size_t& buffer_pos)
 			buffer_pos = 0;
 		}
 
-		if (' '!=network_buffer[buffer_pos])
+		if (ch != network_buffer[buffer_pos])
 			return;
 
 		buffer_pos++;
@@ -85,7 +85,7 @@ void SkipWhitespace(int socket_fd, char*& network_buffer, size_t& buffer_pos)
 
 bool ParseInt(int socket_fd, char*& network_buffer, size_t& buffer_pos, int& result)
 {
-	SkipWhitespace(socket_fd, network_buffer, buffer_pos);
+	SkipCharacter(socket_fd, ' ', network_buffer, buffer_pos);
 
 	bool found_result = false;
 	result = 0;
@@ -110,7 +110,7 @@ bool ParseInt(int socket_fd, char*& network_buffer, size_t& buffer_pos, int& res
 
 bool ParseString(int socket_fd, char*& network_buffer, size_t& buffer_pos, std::string& result)
 {
-	SkipWhitespace(socket_fd, network_buffer, buffer_pos);
+	SkipCharacter(socket_fd, ' ', network_buffer, buffer_pos);
 
 	bool found_result = false;
 	result.clear();
