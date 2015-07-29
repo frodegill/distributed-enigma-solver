@@ -5,41 +5,17 @@
  *  This code is GPLv3.
  */
 
+#include "common.h"
 #include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <ios>
 #include <list>
-#include <netdb.h>
-#include <string>
 #include <stdlib.h>
 #include <unistd.h>
 
 
-#define REFLECTOR_COUNT (2) //B and C
-#define RING_COUNT (8)//I, II, III, IV, V, VI, VII and VIII
-#define PACKET_COUNT (REFLECTOR_COUNT*RING_COUNT*(RING_COUNT-1)*(RING_COUNT-2))
-#define LEFT (0)
-#define MIDDLE (1)
-#define RIGHT (2)
-
-#ifdef DEFAULT_PORT_AS_INT
-# define DEFAULT_PORT     (((('E'-'A')*26*26*26*26*26 + \
-                             ('N'-'A')*26*26*26*26 + \
-                             ('I'-'A')*26*26*26 + \
-                             ('G'-'A')*26*26 + \
-                             ('M'-'A')*26 + \
-                             ('A'-'A')) % (65536-1024)) + 1024)
-#else
-# define DEFAULT_PORT  "2720" //Same as above, as string
-#endif
-
-#define NOT_FOUND (-1)
-#define EQUAL (0)
 #define BACKLOG (10)
-#define RECV_BUFFER_LENGTH (8*1024)
-#define DEFAULT_SEND_FLAGS (0)
-#define DEFAULT_RECV_FLAGS (0)
 #define MAX_CALC_TIME_SEC (60*60)
 
 
@@ -52,47 +28,8 @@ std::string g_max_plugboard;
 std::string g_max_plaintext;
 
 
-char* g_recv_buffer;
+char* g_network_buffer;
 
-
-struct PacketInfo
-{
-	int m_packet_number;
-	int m_reflector;
-	int m_rings[3];
-
-	PacketInfo() {m_packet_number = 0;
-	              m_reflector = 0;
-	              m_rings[LEFT] = m_rings[MIDDLE] = m_rings[RIGHT] = 0;}
-
-	int ToInt() const {return m_reflector*RING_COUNT*RING_COUNT*RING_COUNT+
-	                          m_rings[LEFT]*RING_COUNT*RING_COUNT+
-	                          m_rings[MIDDLE]*RING_COUNT+
-	                          m_rings[RIGHT];}
-
-	void Increment() {
-		m_packet_number++;
-		
-		bool invalid = true;
-		while (invalid)
-		{
-			if (RING_COUNT <= ++m_rings[RIGHT])
-			{
-				m_rings[RIGHT] = 0;
-				if (RING_COUNT <= ++m_rings[MIDDLE])
-				{
-					m_rings[MIDDLE] = 0;
-					if (RING_COUNT <= ++m_rings[LEFT])
-					{
-						m_rings[MIDDLE] = 0;
-						m_reflector++;
-					}
-				}
-			}
-			invalid = (m_rings[LEFT]==m_rings[MIDDLE] || m_rings[MIDDLE]==m_rings[RIGHT] || m_rings[LEFT]==m_rings[RIGHT]);
-		}
-	}
-};
 
 struct PendingPacketInfo
 {
@@ -232,20 +169,6 @@ int CreateSocket(const char* port_str) // Code based on Beej's Guide to Network 
 	return socket_fd;
 }
 
-bool SendBuffer(int client_fd, const char* buffer, size_t buffer_length)
-{
-	int bytes_sent;
-	while (0<buffer_length)
-	{
-		if (-1 == (bytes_sent=send(client_fd, buffer, buffer_length, DEFAULT_SEND_FLAGS)))
-			return false;
-
-		buffer += bytes_sent;
-		buffer_length -= bytes_sent;
-	}
-	return true;
-}
-
 int FindPendingPacketInfo()
 {
 	time_t find_time = time(NULL) - MAX_CALC_TIME_SEC;
@@ -307,103 +230,33 @@ void SendPacket(PacketInfo& packet, int client_fd)
 	}
 	else
 	{
-		sprintf(g_recv_buffer, "SETTING %d\r\n", reflector_and_rings_settings);
-		if (!SendBuffer(client_fd, g_recv_buffer, strlen(g_recv_buffer))) return;
+		sprintf(g_network_buffer, "SETTING %d\r\n", reflector_and_rings_settings);
+		if (!SendBuffer(client_fd, g_network_buffer, strlen(g_network_buffer))) return;
 		RegisterPendingPacketInfo(reflector_and_rings_settings);
 	}
 }
 
-void SkipWhitespace(int client_fd, char*& g_recv_buffer, size_t& buffer_pos)
-{
-	while (true)
-	{
-		if (0 == g_recv_buffer[buffer_pos])
-		{
-			int received_bytes = recv(client_fd, g_recv_buffer, RECV_BUFFER_LENGTH, DEFAULT_RECV_FLAGS);
-			if (-1 == received_bytes) return;
-			
-			g_recv_buffer[received_bytes] = 0;
-			buffer_pos = 0;
-		}
-
-		if (' '!=g_recv_buffer[buffer_pos])
-			return;
-
-		buffer_pos++;
-	}
-}
-
-bool ParseInt(int client_fd, char*& g_recv_buffer, size_t& buffer_pos, int& result)
-{
-	SkipWhitespace(client_fd, g_recv_buffer, buffer_pos);
-
-	bool found_result = false;
-	result = 0;
-	while (true)
-	{
-		if (0 == g_recv_buffer[buffer_pos])
-		{
-			int received_bytes = recv(client_fd, g_recv_buffer, RECV_BUFFER_LENGTH, DEFAULT_RECV_FLAGS);
-			if (-1 == received_bytes) break;
-			
-			g_recv_buffer[received_bytes] = 0;
-			buffer_pos = 0;
-		}
-
-		if ('0'>g_recv_buffer[buffer_pos] || '9'<g_recv_buffer[buffer_pos]) break;
-
-		found_result = true;
-		result = result*10 + g_recv_buffer[buffer_pos++]-'0';
-	}
-	return found_result;
-}
-
-bool ParseString(int client_fd, char*& g_recv_buffer, size_t& buffer_pos, std::string& result)
-{
-	SkipWhitespace(client_fd, g_recv_buffer, buffer_pos);
-
-	bool found_result = false;
-	result.clear();
-	while (true)
-	{
-		if (0 == g_recv_buffer[buffer_pos])
-		{
-			int received_bytes = recv(client_fd, g_recv_buffer, RECV_BUFFER_LENGTH, DEFAULT_RECV_FLAGS);
-			if (-1 == received_bytes) break;
-			
-			g_recv_buffer[received_bytes] = 0;
-			buffer_pos = 0;
-		}
-
-		if ('A'>g_recv_buffer[buffer_pos] || 'Z'<g_recv_buffer[buffer_pos]) break;
-
-		found_result = true;
-		result.append(1, g_recv_buffer[buffer_pos++]);
-	}
-	return found_result;
-}
-
 void HandleClient(PacketInfo& packet_info, int client_fd)
 {
-	int received_bytes = recv(client_fd, g_recv_buffer, RECV_BUFFER_LENGTH, DEFAULT_RECV_FLAGS);
+	int received_bytes = recv(client_fd, g_network_buffer, NETWORK_BUFFER_LENGTH, DEFAULT_RECV_FLAGS);
 	if (-1 == received_bytes) return;
 	
-	g_recv_buffer[received_bytes] = 0;
+	g_network_buffer[received_bytes] = 0;
 	
-	if (EQUAL == strncmp("STATUS", g_recv_buffer, 6))
+	if (EQUAL == strncmp("STATUS", g_network_buffer, 6))
 	{
-		sprintf(g_recv_buffer, "PROGRESS %d/%d\r\n", packet_info.m_packet_number, PACKET_COUNT);
-		if (!SendBuffer(client_fd, g_recv_buffer, strlen(g_recv_buffer))) return;
+		sprintf(g_network_buffer, "PROGRESS %d/%d\r\n", packet_info.m_packet_number, PACKET_COUNT);
+		if (!SendBuffer(client_fd, g_network_buffer, strlen(g_network_buffer))) return;
 
 		int client_count = g_pending_packets.size();
-		sprintf(g_recv_buffer, "CLIENTS %d\r\n", client_count);
-		if (!SendBuffer(client_fd, g_recv_buffer, strlen(g_recv_buffer))) return;
+		sprintf(g_network_buffer, "CLIENTS %d\r\n", client_count);
+		if (!SendBuffer(client_fd, g_network_buffer, strlen(g_network_buffer))) return;
 
-		sprintf(g_recv_buffer, "MAX_SCORE %d\r\n", g_max_score);
-		if (!SendBuffer(client_fd, g_recv_buffer, strlen(g_recv_buffer))) return;
+		sprintf(g_network_buffer, "MAX_SCORE %d\r\n", g_max_score);
+		if (!SendBuffer(client_fd, g_network_buffer, strlen(g_network_buffer))) return;
 
-		sprintf(g_recv_buffer, "MAX_RING_KEY %d\r\n", g_max_ring_key_settings);
-		if (!SendBuffer(client_fd, g_recv_buffer, strlen(g_recv_buffer))) return;
+		sprintf(g_network_buffer, "MAX_RING_KEY %d\r\n", g_max_ring_key_settings);
+		if (!SendBuffer(client_fd, g_network_buffer, strlen(g_network_buffer))) return;
 
 		if (!SendBuffer(client_fd, "MAX_PLUGBOARD ", 14)) return;
 		if (!SendBuffer(client_fd, g_max_plugboard.c_str(), g_max_plugboard.length())) return;
@@ -413,7 +266,7 @@ void HandleClient(PacketInfo& packet_info, int client_fd)
 		if (!SendBuffer(client_fd, g_max_plaintext.c_str(), g_max_plaintext.length())) return;
 		if (!SendBuffer(client_fd, "\r\n", 2)) return;
 	}
-	else if (EQUAL == strncmp("NEW", g_recv_buffer, 3))
+	else if (EQUAL == strncmp("NEW", g_network_buffer, 3))
 	{
 		if (!SendBuffer(client_fd, "WORDS ", 6)) return;
 		if (!SendBuffer(client_fd, g_words.c_str(), g_words.length())) return;
@@ -425,21 +278,21 @@ void HandleClient(PacketInfo& packet_info, int client_fd)
 
 		SendPacket(packet_info, client_fd);
 	}
-	else if (EQUAL == strncmp("DONE ", g_recv_buffer, 5)) //"DONE <setting> <score> <ring/key-settings> <plugboard> <plaintext>"
+	else if (EQUAL == strncmp("DONE ", g_network_buffer, 5)) //"DONE <setting> <score> <ring/key-settings> <plugboard> <plaintext>"
 	{
 		size_t buffer_pos = 5;
 		int reflector_and_rings_settings;
-		if (!ParseInt(client_fd, g_recv_buffer, buffer_pos, reflector_and_rings_settings)) return;
+		if (!ParseInt(client_fd, g_network_buffer, buffer_pos, reflector_and_rings_settings)) return;
 		RemovePendingPacketInfo(reflector_and_rings_settings);
 		
 		int client_score;
-		if (!ParseInt(client_fd, g_recv_buffer, buffer_pos, client_score)) return;
+		if (!ParseInt(client_fd, g_network_buffer, buffer_pos, client_score)) return;
 		if (g_max_score < client_score)
 		{
 			g_max_score = client_score;
-			ParseInt(client_fd, g_recv_buffer, buffer_pos, g_max_ring_key_settings);
-			ParseString(client_fd, g_recv_buffer, buffer_pos, g_max_plugboard);
-			ParseString(client_fd, g_recv_buffer, buffer_pos, g_max_plaintext);
+			ParseInt(client_fd, g_network_buffer, buffer_pos, g_max_ring_key_settings);
+			ParseString(client_fd, g_network_buffer, buffer_pos, g_max_plugboard);
+			ParseString(client_fd, g_network_buffer, buffer_pos, g_max_plaintext);
 
 			fprintf(stdout, "New high: %d %d %s %s\n", g_max_score, g_max_ring_key_settings, g_max_plugboard.c_str(), g_max_plaintext.c_str());
 		}
@@ -451,7 +304,7 @@ void HandleClient(PacketInfo& packet_info, int client_fd)
 
 void MainLoop(int socket_fd)
 {
-	PacketInfo packet_info;
+	PacketInfo packet_info(0);
 	while (PACKET_COUNT > packet_info.m_packet_number)
 	{
 		//Wait for content/connections
@@ -498,16 +351,17 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 
-	g_recv_buffer = new char[RECV_BUFFER_LENGTH+1];
-	if (!g_recv_buffer)
+	g_network_buffer = new char[NETWORK_BUFFER_LENGTH+1];
+	if (!g_network_buffer)
 	{
-		fprintf(stderr, "Allocating RECV buffer failed\n");
+		fprintf(stderr, "Allocating network buffer failed\n");
+		close(socket);
 		return -1;
 	}
 	
 	MainLoop(socket);
 	close(socket);
 	
-	delete[] g_recv_buffer;
+	delete[] g_network_buffer;
 	return 0;
 }
