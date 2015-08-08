@@ -22,6 +22,7 @@ const char* g_hostname;
 const char* g_port;
 char* g_network_buffer;
 
+bool g_request_status = false;
 bool g_done = false;
 
 int g_bigrams[CHAR_COUNT][CHAR_COUNT];
@@ -239,72 +240,96 @@ void MainLoop(int& socket_fd)
 {
 	NetworkInfo network_info;
 	network_info.m_socket_fd = socket_fd;
-	network_info.SetBuffer("NEW",3);
-	network_info.m_available_bytes = network_info.m_remaining_bytes = 3;
-	if (!StartSendBuffer(network_info) || 0!=network_info.m_remaining_bytes)
-		return;
-
-	network_info.SetBuffer(g_network_buffer,NETWORK_BUFFER_LENGTH);
-	if (!StartRecvBuffer(network_info) ||
-	    !ParseWordlist(network_info) || 0<network_info.m_remaining_bytes)
+	if (g_request_status)
 	{
-		return;
+		network_info.SetBuffer("STATUS",6);
+		network_info.m_available_bytes = network_info.m_remaining_bytes = 6;
+		if (!StartSendBuffer(network_info) || 0!=network_info.m_remaining_bytes)
+			return;
+
+		network_info.SetBuffer(g_network_buffer,NETWORK_BUFFER_LENGTH);
+		if (!StartRecvBuffer(network_info))
+			return;
+
+		while (0<network_info.LeftToParse())
+		{
+			std::string str(network_info.const_buf(), network_info.m_available_bytes);
+			network_info.m_parsed_pos = network_info.m_available_bytes;
+			fprintf(stdout, "%s", str.c_str());
+
+			if (!ContinueRecvBuffer(network_info))
+				return;
+		}
 	}
-
-	if (!StartRecvBuffer(network_info) ||
-	    !ParseEncryptedText(network_info) || 0<network_info.m_remaining_bytes)
+	else
 	{
-		return;
-	}
+		network_info.SetBuffer("NEW",3);
+		network_info.m_available_bytes = network_info.m_remaining_bytes = 3;
+		if (!StartSendBuffer(network_info) || 0!=network_info.m_remaining_bytes)
+			return;
 
-	while (!g_done)
-	{
 		network_info.SetBuffer(g_network_buffer,NETWORK_BUFFER_LENGTH);
 		if (!StartRecvBuffer(network_info) ||
-		    !ParseSetting(network_info) || 0<network_info.m_remaining_bytes)
-		{
-			break;
-		}
-
-		close(socket_fd);
-		fprintf(stderr, "Closed socket %d\n", socket_fd);
-		socket_fd = -1;
-
-		//Calculate
-
-		//Create socket, send result, loop and read next packet info
-		socket_fd = CreateSocket(g_hostname, g_port);
-		if (-1 == socket_fd)
-		{
-			fprintf(stderr, "Connecting to server failed\n");
-			return;
-		}
-		fprintf(stderr, "Created socket %d\n", socket_fd);
-
-		int score = 0;
-		int ring_key_setting = 0;
-		std::string plugboard="ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-		std::string plaintext="TODO";
-		sprintf(network_info.buf(), "DONE %d %d %d %s ", g_reflector_ring_settings->ToInt(), score, ring_key_setting, plugboard.c_str());
-		network_info.m_available_bytes = strlen(network_info.const_buf());
-		network_info.m_remaining_bytes = network_info.m_available_bytes+plaintext.length();
-		if (!StartSendBuffer(network_info))
+				!ParseWordlist(network_info) || 0<network_info.m_remaining_bytes)
 		{
 			return;
 		}
 
-		network_info.SetBuffer(plaintext.c_str(), plaintext.length());
-		network_info.m_available_bytes = plaintext.length();
-		if (!ContinueSendBuffer(network_info) || 0!=network_info.m_remaining_bytes)
+		if (!StartRecvBuffer(network_info) ||
+				!ParseEncryptedText(network_info) || 0<network_info.m_remaining_bytes)
 		{
 			return;
+		}
+
+		while (!g_done)
+		{
+			network_info.SetBuffer(g_network_buffer,NETWORK_BUFFER_LENGTH);
+			if (!StartRecvBuffer(network_info) ||
+					!ParseSetting(network_info) || 0<network_info.m_remaining_bytes)
+			{
+				break;
+			}
+
+			close(socket_fd);
+			fprintf(stderr, "Closed socket %d\n", socket_fd);
+			socket_fd = -1;
+
+			//Calculate
+
+			//Create socket, send result, loop and read next packet info
+			socket_fd = CreateSocket(g_hostname, g_port);
+			if (-1 == socket_fd)
+			{
+				fprintf(stderr, "Connecting to server failed\n");
+				return;
+			}
+			fprintf(stderr, "Created socket %d\n", socket_fd);
+
+			int score = 0;
+			int ring_key_setting = 0;
+			std::string plugboard="ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+			std::string plaintext="TODO";
+			sprintf(network_info.buf(), "DONE %d %d %d %s ", g_reflector_ring_settings->ToInt(), score, ring_key_setting, plugboard.c_str());
+			network_info.m_available_bytes = strlen(network_info.const_buf());
+			network_info.m_remaining_bytes = network_info.m_available_bytes+plaintext.length();
+			if (!StartSendBuffer(network_info))
+			{
+				return;
+			}
+
+			network_info.SetBuffer(plaintext.c_str(), plaintext.length());
+			network_info.m_available_bytes = plaintext.length();
+			if (!ContinueSendBuffer(network_info) || 0!=network_info.m_remaining_bytes)
+			{
+				return;
+			}
 		}
 	}
 }
 
 void PrintUsage()
 {
-	fprintf(stdout, "\nParameters: <server hostname> [server port] (default port: 2720)\n\n"
+	fprintf(stdout, "\nParameters: <server hostname> [server port] (default port: 2720) [--status]\n\n"
 									"Example: ./enigma-solver-client localhost 2720\n\n");
 }
 
@@ -314,6 +339,12 @@ int main(int argc, char* argv[])
 	{
 		PrintUsage();
 		return -1;
+	}
+
+	if (EQUAL==strcmp(argv[argc-1], "--status"))
+	{
+		g_request_status = true;
+		argc--;
 	}
 
 	InitializeEnigma();
