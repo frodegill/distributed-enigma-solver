@@ -223,17 +223,17 @@ void SendPacket(PacketInfo& packet, NetworkInfo& network_info)
 		reflector_and_rings_settings = packet.ToInt();
 	}
 
-	network_info.m_buffer = g_network_buffer;
 	if (PACKET_COUNT <= packet.m_packet_number)
 	{
-		network_info.m_buffer = "DONE";
-		network_info.m_buffer_length = network_info.m_remaining_bytes = 4;
+		network_info.SetBuffer("DONE",4);
+		network_info.m_available_bytes = network_info.m_remaining_bytes = 4;
 		StartSendBuffer(network_info);
 	}
 	else
 	{
-		sprintf(network_info.Buf(), "SETTING %d", reflector_and_rings_settings);
-		network_info.m_buffer_length = network_info.m_remaining_bytes = strlen(network_info.m_buffer);
+		network_info.SetBuffer(g_network_buffer,NETWORK_BUFFER_LENGTH);
+		sprintf(network_info.buf(), "SETTING %d", reflector_and_rings_settings);
+		network_info.m_available_bytes = network_info.m_remaining_bytes = strlen(network_info.const_buf());
 		if (!StartSendBuffer(network_info) || 0!=network_info.m_remaining_bytes)
 			return;
 
@@ -243,8 +243,8 @@ void SendPacket(PacketInfo& packet, NetworkInfo& network_info)
 
 void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 {
-	network_info.m_buffer = g_network_buffer;
-	network_info.m_buffer_length = NETWORK_BUFFER_LENGTH;
+	network_info.SetBuffer(g_network_buffer,NETWORK_BUFFER_LENGTH);
+	
 	if (!StartRecvBuffer(network_info))
 		return;
 
@@ -259,8 +259,8 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 	{
 		fprintf(stdout, "Received STATUS\n");
 
-		network_info.m_buffer = g_network_buffer;
-		sprintf(network_info.Buf(), "PROGRESS %d/%d\n"\
+		network_info.SetBuffer(g_network_buffer,NETWORK_BUFFER_LENGTH);
+		sprintf(network_info.buf(), "PROGRESS %d/%d\n"\
 		                            "CLIENTS %d\n"\
 		                            "MAX_SCORE %d\n"\
 		                            "MAX_RING_KEY %d\n"\
@@ -271,11 +271,10 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 		        g_max_score,
 		        g_max_ring_key_settings,
 		        g_max_plugboard.c_str());
-		network_info.m_buffer_length = strlen(network_info.m_buffer);
-		network_info.m_remaining_bytes = network_info.m_buffer_length+g_max_plaintext.length();
+		network_info.m_available_bytes = strlen(network_info.const_buf());
+		network_info.m_remaining_bytes = network_info.m_available_bytes+g_max_plaintext.length();
 		if (!StartSendBuffer(network_info)) return;
-		network_info.m_buffer = g_max_plaintext.c_str();
-		network_info.m_buffer_length = g_max_plaintext.length();
+		network_info.SetBuffer(g_max_plaintext.c_str(), g_max_plaintext.length());
 		if (!ContinueSendBuffer(network_info) || 0!=network_info.m_remaining_bytes) return;
 
 		fprintf(stdout, "Handled STATUS\n");
@@ -291,21 +290,21 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 		}
 
 		network_info.m_remaining_bytes = 6+g_words.length();
-		network_info.m_buffer = "WORDS ";
-		network_info.m_buffer_length = 6;
+		network_info.SetBuffer("WORDS ",6);
+		network_info.m_available_bytes = 6;
 		if (!StartSendBuffer(network_info)) return;
 
-		network_info.m_buffer = g_words.c_str();
-		network_info.m_buffer_length = g_words.length();
+		network_info.SetBuffer(g_words.c_str(), g_words.length());
+		network_info.m_available_bytes = g_words.length();
 		if (!ContinueSendBuffer(network_info) || 0!=network_info.m_remaining_bytes) return;
 		
 		network_info.m_remaining_bytes = 5+g_encrypted_text.length();
-		network_info.m_buffer = "TEXT ";
-		network_info.m_buffer_length = 5;
+		network_info.SetBuffer("TEXT ",5);
+		network_info.m_available_bytes = 5;
 		if (!StartSendBuffer(network_info)) return;
 
-		network_info.m_buffer = g_encrypted_text.c_str();
-		network_info.m_buffer_length = g_encrypted_text.length();
+		network_info.SetBuffer(g_encrypted_text.c_str(), g_encrypted_text.length());
+		network_info.m_available_bytes = g_encrypted_text.length();
 		if (!ContinueSendBuffer(network_info) || 0!=network_info.m_remaining_bytes) return;
 
 		SendPacket(packet_info, network_info);
@@ -316,7 +315,7 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 	{
 		fprintf(stdout, "Received DONE\n");
 
-		network_info.m_buffer_pos = 5;
+		network_info.m_parsed_pos = 5;
 		int reflector_and_rings_settings;
 		if (!ParseInt(network_info, reflector_and_rings_settings))
 		{

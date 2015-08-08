@@ -54,9 +54,6 @@ void PacketInfo::Increment()
 
 bool StartSendBuffer(NetworkInfo& network_info)
 {
-	if (network_info.m_buffer_length > network_info.m_remaining_bytes)
-		return false;
-
 	uint8_t size_buffer[4];
 	size_buffer[0] = (network_info.m_remaining_bytes&0xF000)>>24;
 	size_buffer[1] = (network_info.m_remaining_bytes&0x0F00)>>16;
@@ -70,22 +67,19 @@ bool StartSendBuffer(NetworkInfo& network_info)
 		return false;
 	}
 
-	network_info.m_buffer_pos = 0;
+	network_info.m_parsed_pos = 0;
 	return ContinueSendBuffer(network_info);
 }
 
 bool ContinueSendBuffer(NetworkInfo& network_info)
 {
-	if (network_info.m_buffer_length > network_info.m_remaining_bytes)
-		return false;
-
 	size_t total_bytes_sent = 0;
 	int bytes_sent;
-	while (total_bytes_sent < network_info.m_buffer_length)
+	while (total_bytes_sent < network_info.m_available_bytes)
 	{
 		if (-1 == (bytes_sent=::send(network_info.m_socket_fd,
-		                             network_info.m_buffer+total_bytes_sent,
-		                             network_info.m_buffer_length-total_bytes_sent,
+		                             network_info.const_buf()+total_bytes_sent,
+		                             network_info.m_available_bytes-total_bytes_sent,
 		                             DEFAULT_SEND_FLAGS)))
 		{
 			return false;
@@ -110,7 +104,8 @@ bool StartRecvBuffer(NetworkInfo& network_info)
 		return false;
 	}
 
-	network_info.m_buffer_pos = 0;
+	network_info.m_available_bytes = 0;
+	network_info.m_parsed_pos = 0;
 	network_info.m_remaining_bytes = (size_t)(size_buffer[0])<<24 | (size_t)(size_buffer[1])<<16 | (size_t)(size_buffer[2])<<8 | size_buffer[3];
 	return ContinueRecvBuffer(network_info);
 }
@@ -119,19 +114,19 @@ bool ContinueRecvBuffer(NetworkInfo& network_info)
 {
 	if (0 < network_info.LeftToParse())
 	{
-		memmove(network_info.Buf(), network_info.m_buffer+network_info.m_buffer_pos, network_info.LeftToParse());
-		network_info.m_buffer_pos = network_info.LeftToParse();
+		memmove(network_info.buf(), network_info.const_buf()+network_info.m_parsed_pos, network_info.LeftToParse());
+		network_info.m_parsed_pos = network_info.LeftToParse();
 	}
 
 	time_t start_time = ::time(NULL);
-	size_t bytes_to_receive = MIN(network_info.m_buffer_length-network_info.m_buffer_pos,network_info.m_remaining_bytes);
+	size_t bytes_to_receive = MIN(network_info.GetBufferSize()-network_info.m_available_bytes,network_info.m_remaining_bytes);
 	size_t total_bytes_received = 0;
 	int bytes_received;
 	while (total_bytes_received < bytes_to_receive)
 	{
 		if (-1 == (bytes_received=::recv(network_info.m_socket_fd,
-		                                 network_info.Buf()+network_info.m_buffer_pos+total_bytes_received,
-		                                 network_info.m_buffer_length-total_bytes_received,
+		                                 network_info.buf()+network_info.m_available_bytes,
+		                                 bytes_to_receive-total_bytes_received,
 		                                 DEFAULT_SEND_FLAGS)))
 		{
 			return false;
@@ -140,6 +135,7 @@ bool ContinueRecvBuffer(NetworkInfo& network_info)
 		fprintf(stdout, "Received %d of %d bytes\n", bytes_received, (int)(network_info.m_remaining_bytes));
 
 		total_bytes_received += bytes_received;
+		network_info.m_available_bytes += bytes_received;
 		network_info.m_remaining_bytes -= bytes_received;
 
 		if (0 < network_info.m_remaining_bytes)
@@ -160,15 +156,15 @@ bool ContinueRecvBuffer(NetworkInfo& network_info)
 
 void SkipCharacter(NetworkInfo& network_info, char ch)
 {
-	while (true)
+	while (network_info.m_parsed_pos < (network_info.m_available_bytes+network_info.m_remaining_bytes))
 	{
-		if (network_info.m_buffer_pos >= network_info.m_buffer_length && !ContinueRecvBuffer(network_info))
+		if (network_info.m_parsed_pos >= network_info.m_available_bytes && !ContinueRecvBuffer(network_info))
 			return;
 
-		if (ch != network_info.m_buffer[network_info.m_buffer_pos])
+		if (ch != *(network_info.const_buf()+network_info.m_parsed_pos))
 			return;
 
-		network_info.m_buffer_pos++;
+		network_info.m_parsed_pos++;
 	}
 }
 
@@ -179,17 +175,17 @@ bool ParseInt(NetworkInfo& network_info, int& result)
 	bool found_result = false;
 	result = 0;
 	char ch;
-	while (0 < network_info.m_remaining_bytes)
+	while (network_info.m_parsed_pos < (network_info.m_available_bytes+network_info.m_remaining_bytes))
 	{
-		if (network_info.m_buffer_pos >= network_info.m_buffer_length && !ContinueRecvBuffer(network_info))
+		if (network_info.m_parsed_pos >= network_info.m_available_bytes && !ContinueRecvBuffer(network_info))
 			return false;
 
-		ch = network_info.m_buffer[network_info.m_buffer_pos];
+		ch = *(network_info.const_buf()+network_info.m_parsed_pos);
 		if ('0'>ch || '9'<ch) break;
 
 		found_result = true;
 		result = result*10 + ch-'0';
-		network_info.m_buffer_pos++;
+		network_info.m_parsed_pos++;
 	}
 	return found_result;
 }
@@ -201,17 +197,17 @@ bool ParseString(NetworkInfo& network_info, std::string& result)
 	bool found_result = false;
 	result.clear();
 	char ch;
-	while (0 < network_info.m_remaining_bytes)
+	while (network_info.m_parsed_pos < (network_info.m_available_bytes+network_info.m_remaining_bytes))
 	{
-		if (network_info.m_buffer_pos >= network_info.m_buffer_length && !ContinueRecvBuffer(network_info))
+		if (network_info.m_parsed_pos >= network_info.m_available_bytes && !ContinueRecvBuffer(network_info))
 			return false;
 
-		ch = network_info.m_buffer[network_info.m_buffer_pos];
+		ch = *(network_info.const_buf()+network_info.m_parsed_pos);
 		if ('A'>ch || 'Z'<ch) break;
 
 		found_result = true;
 		result.append(1, ch);
-		network_info.m_buffer_pos++;
+		network_info.m_parsed_pos++;
 	}
 	return found_result;
 }

@@ -239,13 +239,12 @@ void MainLoop(int& socket_fd)
 {
 	NetworkInfo network_info;
 	network_info.m_socket_fd = socket_fd;
-	network_info.m_buffer = "NEW";
-	network_info.m_buffer_length = network_info.m_remaining_bytes = 3;
+	network_info.SetBuffer("NEW",3);
+	network_info.m_available_bytes = network_info.m_remaining_bytes = 3;
 	if (!StartSendBuffer(network_info) || 0!=network_info.m_remaining_bytes)
 		return;
 
-	network_info.m_buffer = g_network_buffer;
-	network_info.m_buffer_length = NETWORK_BUFFER_LENGTH;
+	network_info.SetBuffer(g_network_buffer,NETWORK_BUFFER_LENGTH);
 	if (!StartRecvBuffer(network_info) ||
 	    !ParseWordlist(network_info) || 0<network_info.m_remaining_bytes)
 	{
@@ -260,8 +259,7 @@ void MainLoop(int& socket_fd)
 
 	while (!g_done)
 	{
-		network_info.m_buffer = g_network_buffer;
-		network_info.m_buffer_length = NETWORK_BUFFER_LENGTH;
+		network_info.SetBuffer(g_network_buffer,NETWORK_BUFFER_LENGTH);
 		if (!StartRecvBuffer(network_info) ||
 		    !ParseSetting(network_info) || 0<network_info.m_remaining_bytes)
 		{
@@ -287,16 +285,15 @@ void MainLoop(int& socket_fd)
 		int ring_key_setting = 0;
 		std::string plugboard="ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 		std::string plaintext="TODO";
-		sprintf(network_info.Buf(), "DONE %d %d %d %s ", g_reflector_ring_settings->ToInt(), score, ring_key_setting, plugboard.c_str());
-		network_info.m_buffer_length = strlen(network_info.m_buffer);
-		network_info.m_remaining_bytes = network_info.m_buffer_length+plaintext.length();
+		sprintf(network_info.buf(), "DONE %d %d %d %s ", g_reflector_ring_settings->ToInt(), score, ring_key_setting, plugboard.c_str());
+		network_info.m_available_bytes = strlen(network_info.const_buf());
+		network_info.m_remaining_bytes = network_info.m_available_bytes+plaintext.length();
 		if (!StartSendBuffer(network_info))
 		{
 			return;
 		}
 
-		network_info.m_buffer = plaintext.c_str();
-		network_info.m_buffer_length = plaintext.length();
+		network_info.SetBuffer(plaintext.c_str(), plaintext.length());
 		if (!ContinueSendBuffer(network_info) || 0!=network_info.m_remaining_bytes)
 		{
 			return;

@@ -42,13 +42,25 @@
 
 struct NetworkInfo
 {
-	int m_socket_fd;
-	size_t m_remaining_bytes;
+private:
 	const char* m_buffer;
-	size_t m_buffer_length;
-	size_t m_buffer_pos;
-	char* Buf() const {return (char*)m_buffer;}
-	size_t LeftToParse() const {return m_buffer_length-m_buffer_pos;}
+	size_t m_buffer_size;
+
+public:
+	int m_socket_fd;
+
+	size_t m_remaining_bytes; //Total remaining bytes (may be larger than one network buffer)
+	size_t m_available_bytes; //Bytes either read and ready to parse, or written and ready to send
+
+	size_t m_parsed_pos;
+
+	void SetBuffer(const char* buffer, size_t buffer_size) {m_buffer=buffer; m_buffer_size=buffer_size;
+	                                                        m_available_bytes=m_parsed_pos=0;}
+	const char* const_buf() const {return m_buffer;}
+	char* buf() const {return (char*)m_buffer;}
+	size_t GetBufferSize() const {return m_buffer_size;}
+
+	size_t LeftToParse() const {return m_available_bytes-m_parsed_pos;}
 };
 
 struct PacketInfo
