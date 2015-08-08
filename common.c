@@ -55,10 +55,10 @@ void PacketInfo::Increment()
 bool StartSendBuffer(NetworkInfo& network_info)
 {
 	uint8_t size_buffer[4];
-	size_buffer[0] = (network_info.m_remaining_bytes&0xF000)>>24;
-	size_buffer[1] = (network_info.m_remaining_bytes&0x0F00)>>16;
-	size_buffer[2] = (network_info.m_remaining_bytes&0x00F0)>>8;
-	size_buffer[3] = (network_info.m_remaining_bytes&0x000F);
+	size_buffer[0] = (network_info.m_remaining_bytes&0xFF000000)>>24;
+	size_buffer[1] = (network_info.m_remaining_bytes&0x00FF0000)>>16;
+	size_buffer[2] = (network_info.m_remaining_bytes&0x0000FF00)>>8;
+	size_buffer[3] = (network_info.m_remaining_bytes&0x000000FF);
 
 	int bytes_sent = 0;
 	if (-1 == (bytes_sent=::send(network_info.m_socket_fd, size_buffer, 4, DEFAULT_SEND_FLAGS)) ||
@@ -143,10 +143,11 @@ bool ContinueRecvBuffer(NetworkInfo& network_info)
 			if (TIMEOUT < (time(NULL)-start_time))
 				return false;
 
-			//Sleep half a second
+			//Sleep 1ms
 			struct timespec ts;
 			ts.tv_sec = 0;
-			ts.tv_nsec = 500*1000*1000;
+			ts.tv_nsec = 1*1000*1000;
+			fprintf(stdout, "Sleeping 1ms\n");
 			::nanosleep(&ts, NULL);
 		}
 	}

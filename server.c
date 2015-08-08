@@ -377,7 +377,7 @@ void MainLoop(int socket_fd)
 		fprintf(stdout, "Accepted socket %d\n", network_info.m_socket_fd);
 		HandleClient(packet_info, network_info);
 		close(network_info.m_socket_fd);
-		fprintf(stderr, "Closeded socket %d\n", network_info.m_socket_fd);
+		fprintf(stderr, "Closed socket %d\n", network_info.m_socket_fd);
 	}
 }
 

@@ -174,7 +174,7 @@ bool ParseWordlist(NetworkInfo& network_info)
 	std::string word;
 	if (!ParseString(network_info, word) || EQUAL!=word.compare("WORDS")) return false;
 
-	while (0 < network_info.m_remaining_bytes)
+	while (network_info.m_parsed_pos < (network_info.m_available_bytes+network_info.m_remaining_bytes))
 	{
 		if (!ParseString(network_info, word))
 			return false;
@@ -294,6 +294,7 @@ void MainLoop(int& socket_fd)
 		}
 
 		network_info.SetBuffer(plaintext.c_str(), plaintext.length());
+		network_info.m_available_bytes = plaintext.length();
 		if (!ContinueSendBuffer(network_info) || 0!=network_info.m_remaining_bytes)
 		{
 			return;
