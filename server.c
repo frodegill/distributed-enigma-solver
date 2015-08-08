@@ -18,6 +18,7 @@
 #define BACKLOG (10)
 #define MAX_CALC_TIME_SEC (60*60)
 
+char* g_network_buffer;
 
 std::string g_words;
 std::string g_encrypted_text;
@@ -26,9 +27,6 @@ int g_max_score = 0;
 int g_max_ring_key_settings = 0;
 std::string g_max_plugboard;
 std::string g_max_plaintext;
-
-
-char* g_network_buffer;
 
 
 struct PendingPacketInfo
@@ -154,6 +152,7 @@ int CreateSocket(const char* port_str) // Code based on Beej's Guide to Network 
 
 		if (bind(socket_fd, p->ai_addr, p->ai_addrlen) < 0) {
 			close(socket_fd);
+			fprintf(stderr, "Closeded socket %d\n", socket_fd);
 			continue;
 		}
 		break;
@@ -215,7 +214,7 @@ void RegisterPendingPacketInfo(int reflector_and_rings_settings)
 	g_pending_packets.push_back(pending_packet_info);
 }
 
-void SendPacket(PacketInfo& packet, int client_fd)
+void SendPacket(PacketInfo& packet, NetworkInfo& network_info)
 {
 	int reflector_and_rings_settings = FindPendingPacketInfo();
 	if (NOT_FOUND == reflector_and_rings_settings)
@@ -224,87 +223,150 @@ void SendPacket(PacketInfo& packet, int client_fd)
 		reflector_and_rings_settings = packet.ToInt();
 	}
 
+	network_info.m_buffer = g_network_buffer;
 	if (PACKET_COUNT <= packet.m_packet_number)
 	{
-		SendBuffer(client_fd, "DONE", 4);
+		network_info.m_buffer = "DONE";
+		network_info.m_buffer_length = network_info.m_remaining_bytes = 4;
+		StartSendBuffer(network_info);
 	}
 	else
 	{
-		sprintf(g_network_buffer, "SETTING %d\n", reflector_and_rings_settings);
-		if (!SendBuffer(client_fd, g_network_buffer, strlen(g_network_buffer))) return;
+		sprintf(network_info.Buf(), "SETTING %d", reflector_and_rings_settings);
+		network_info.m_buffer_length = network_info.m_remaining_bytes = strlen(network_info.m_buffer);
+		if (!StartSendBuffer(network_info) || 0!=network_info.m_remaining_bytes)
+			return;
+
 		RegisterPendingPacketInfo(reflector_and_rings_settings);
 	}
 }
 
-void HandleClient(PacketInfo& packet_info, int client_fd)
+void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 {
-	int received_bytes = recv(client_fd, g_network_buffer, NETWORK_BUFFER_LENGTH, DEFAULT_RECV_FLAGS);
-	if (-1 == received_bytes) return;
-	
-	g_network_buffer[received_bytes] = 0;
-	
-	if (EQUAL == strncmp("STATUS", g_network_buffer, 6))
+	network_info.m_buffer = g_network_buffer;
+	network_info.m_buffer_length = NETWORK_BUFFER_LENGTH;
+	if (!StartRecvBuffer(network_info))
+		return;
+
+	std::string command;
+	if (!ParseString(network_info, command))
 	{
-		sprintf(g_network_buffer, "PROGRESS %d/%d\n", packet_info.m_packet_number, PACKET_COUNT);
-		if (!SendBuffer(client_fd, g_network_buffer, strlen(g_network_buffer))) return;
-
-		int client_count = g_pending_packets.size();
-		sprintf(g_network_buffer, "CLIENTS %d\n", client_count);
-		if (!SendBuffer(client_fd, g_network_buffer, strlen(g_network_buffer))) return;
-
-		sprintf(g_network_buffer, "MAX_SCORE %d\n", g_max_score);
-		if (!SendBuffer(client_fd, g_network_buffer, strlen(g_network_buffer))) return;
-
-		sprintf(g_network_buffer, "MAX_RING_KEY %d\n", g_max_ring_key_settings);
-		if (!SendBuffer(client_fd, g_network_buffer, strlen(g_network_buffer))) return;
-
-		if (!SendBuffer(client_fd, "MAX_PLUGBOARD ", 14)) return;
-		if (!SendBuffer(client_fd, g_max_plugboard.c_str(), g_max_plugboard.length())) return;
-		if (!SendBuffer(client_fd, "\n", 1)) return;
-
-		if (!SendBuffer(client_fd, "MAX_PLAINTEXT ", 14)) return;
-		if (!SendBuffer(client_fd, g_max_plaintext.c_str(), g_max_plaintext.length())) return;
-		if (!SendBuffer(client_fd, "\n", 1)) return;
+			fprintf(stdout, "Failed parsing command\n");
+			return;
 	}
-	else if (EQUAL == strncmp("NEW", g_network_buffer, 3))
+
+	if (EQUAL == command.compare("STATUS"))
 	{
-		if (!SendBuffer(client_fd, "WORDS ", 6)) return;
-		if (!SendBuffer(client_fd, g_words.c_str(), g_words.length())) return;
-		if (!SendBuffer(client_fd, "\n", 1)) return;
+		fprintf(stdout, "Received STATUS\n");
 
-		if (!SendBuffer(client_fd, "TEXT ", 5)) return;
-		if (!SendBuffer(client_fd, g_encrypted_text.c_str(), g_encrypted_text.length())) return;
-		if (!SendBuffer(client_fd, "\n", 1)) return;
+		network_info.m_buffer = g_network_buffer;
+		sprintf(network_info.Buf(), "PROGRESS %d/%d\n"\
+		                            "CLIENTS %d\n"\
+		                            "MAX_SCORE %d\n"\
+		                            "MAX_RING_KEY %d\n"\
+		                            "MAX_PLUGBOARD %s\n"\
+		                            "MAX_PLAINTEXT ",
+		        packet_info.m_packet_number, PACKET_COUNT,
+		        (int)(g_pending_packets.size()),
+		        g_max_score,
+		        g_max_ring_key_settings,
+		        g_max_plugboard.c_str());
+		network_info.m_buffer_length = strlen(network_info.m_buffer);
+		network_info.m_remaining_bytes = network_info.m_buffer_length+g_max_plaintext.length();
+		if (!StartSendBuffer(network_info)) return;
+		network_info.m_buffer = g_max_plaintext.c_str();
+		network_info.m_buffer_length = g_max_plaintext.length();
+		if (!ContinueSendBuffer(network_info) || 0!=network_info.m_remaining_bytes) return;
 
-		SendPacket(packet_info, client_fd);
+		fprintf(stdout, "Handled STATUS\n");
 	}
-	else if (EQUAL == strncmp("DONE ", g_network_buffer, 5)) //"DONE <setting> <score> <ring/key-settings> <plugboard> <plaintext>"
+	else if (EQUAL == command.compare("NEW"))
 	{
-		size_t buffer_pos = 5;
+		fprintf(stdout, "Received NEW\n");
+
+		if (0 < network_info.m_remaining_bytes)
+		{
+			fprintf(stdout, "Unexpected content after NEW\n");
+			return;
+		}
+
+		network_info.m_remaining_bytes = 6+g_words.length();
+		network_info.m_buffer = "WORDS ";
+		network_info.m_buffer_length = 6;
+		if (!StartSendBuffer(network_info)) return;
+
+		network_info.m_buffer = g_words.c_str();
+		network_info.m_buffer_length = g_words.length();
+		if (!ContinueSendBuffer(network_info) || 0!=network_info.m_remaining_bytes) return;
+		
+		network_info.m_remaining_bytes = 5+g_encrypted_text.length();
+		network_info.m_buffer = "TEXT ";
+		network_info.m_buffer_length = 5;
+		if (!StartSendBuffer(network_info)) return;
+
+		network_info.m_buffer = g_encrypted_text.c_str();
+		network_info.m_buffer_length = g_encrypted_text.length();
+		if (!ContinueSendBuffer(network_info) || 0!=network_info.m_remaining_bytes) return;
+
+		SendPacket(packet_info, network_info);
+
+		fprintf(stdout, "Handled NEW\n");
+	}
+	else if (EQUAL == command.compare("DONE")) //"DONE <setting> <score> <ring/key-settings> <plugboard> <plaintext>"
+	{
+		fprintf(stdout, "Received DONE\n");
+
+		network_info.m_buffer_pos = 5;
 		int reflector_and_rings_settings;
-		if (!ParseInt(client_fd, g_network_buffer, buffer_pos, reflector_and_rings_settings)) return;
+		if (!ParseInt(network_info, reflector_and_rings_settings))
+		{
+			fprintf(stdout, "Error parsing new highscore1\n");
+			return;
+		}
+		fprintf(stdout, "Got reflector_ring_setting %d\n", reflector_and_rings_settings);
 		RemovePendingPacketInfo(reflector_and_rings_settings);
 		
 		int client_score;
-		if (!ParseInt(client_fd, g_network_buffer, buffer_pos, client_score)) return;
+		if (!ParseInt(network_info, client_score))
+		{
+			fprintf(stdout, "Error parsing new highscore2\n");
+			return;
+		}
+		fprintf(stdout, "Got score %d\n", client_score);
 		if (g_max_score < client_score)
 		{
 			g_max_score = client_score;
-			ParseInt(client_fd, g_network_buffer, buffer_pos, g_max_ring_key_settings);
-			ParseString(client_fd, g_network_buffer, buffer_pos, g_max_plugboard);
-			ParseString(client_fd, g_network_buffer, buffer_pos, g_max_plaintext);
-
-			fprintf(stdout, "New high: %d %d %s %s\n", g_max_score, g_max_ring_key_settings, g_max_plugboard.c_str(), g_max_plaintext.c_str());
+			if (!ParseInt(network_info, g_max_ring_key_settings) ||
+			    !ParseString(network_info, g_max_plugboard) ||
+			    !ParseString(network_info, g_max_plaintext))
+			{
+				fprintf(stdout, "Error parsing new highscore3\n");
+			}
+			else
+			{
+				fprintf(stdout, "New high: %d %d %s %s\n", g_max_score, g_max_ring_key_settings, g_max_plugboard.c_str(), g_max_plaintext.c_str());
+			}
 		}
 
-		SendPacket(packet_info, client_fd);
-	}
+		if (0 < network_info.m_remaining_bytes)
+		{
+			fprintf(stdout, "Unexpected content after DONE plaintext\n");
+			return;
+		}
 
+		SendPacket(packet_info, network_info);
+		fprintf(stdout, "Handled DONE\n");
+	}
+	else
+	{
+		fprintf(stdout, "Unexpected command \"%s\"\n", command.c_str());
+	}
 }
 
 void MainLoop(int socket_fd)
 {
 	PacketInfo packet_info(0);
+	NetworkInfo network_info;
 	while (PACKET_COUNT > packet_info.m_packet_number)
 	{
 		//Wait for content/connections
@@ -312,9 +374,11 @@ void MainLoop(int socket_fd)
 		socklen_t addr_size = sizeof their_addr;
 		fprintf(stdout, "Waiting...(%d/%d)\n", packet_info.m_packet_number, PACKET_COUNT);
 
-		int client_fd = accept(socket_fd, (struct sockaddr*)&their_addr, &addr_size);
-		HandleClient(packet_info, client_fd);
-		close(client_fd);
+		network_info.m_socket_fd = accept(socket_fd, (struct sockaddr*)&their_addr, &addr_size);
+		fprintf(stdout, "Accepted socket %d\n", network_info.m_socket_fd);
+		HandleClient(packet_info, network_info);
+		close(network_info.m_socket_fd);
+		fprintf(stderr, "Closeded socket %d\n", network_info.m_socket_fd);
 	}
 }
 
@@ -350,18 +414,23 @@ int main(int argc, char* argv[])
 		fprintf(stderr, "Initializing server failed\n");
 		return -1;
 	}
+	fprintf(stderr, "Created socket %d\n", socket);
 
 	g_network_buffer = new char[NETWORK_BUFFER_LENGTH+1];
 	if (!g_network_buffer)
 	{
 		fprintf(stderr, "Allocating network buffer failed\n");
 		close(socket);
+		fprintf(stderr, "Closeded socket %d\n", socket);
 		return -1;
 	}
+	g_network_buffer[NETWORK_BUFFER_LENGTH] = 0;
 	
 	MainLoop(socket);
 	close(socket);
+	fprintf(stderr, "Closeded socket %d\n", socket);
 	
 	delete[] g_network_buffer;
+
 	return 0;
 }

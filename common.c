@@ -6,6 +6,9 @@
  */
 
 #include "common.h"
+#include <cstdio>
+#include <string.h>
+#include <time.h>
 
 
 PacketInfo::PacketInfo(int packet_number)
@@ -49,86 +52,166 @@ void PacketInfo::Increment()
 }
 
 
-bool SendBuffer(int socket_fd, const char* buffer, size_t buffer_length)
+bool StartSendBuffer(NetworkInfo& network_info)
 {
-	int bytes_sent;
-	while (0<buffer_length)
-	{
-		if (-1 == (bytes_sent=send(socket_fd, buffer, buffer_length, DEFAULT_SEND_FLAGS)))
-			return false;
+	if (network_info.m_buffer_length > network_info.m_remaining_bytes)
+		return false;
 
-		buffer += bytes_sent;
-		buffer_length -= bytes_sent;
+	uint8_t size_buffer[4];
+	size_buffer[0] = (network_info.m_remaining_bytes&0xF000)>>24;
+	size_buffer[1] = (network_info.m_remaining_bytes&0x0F00)>>16;
+	size_buffer[2] = (network_info.m_remaining_bytes&0x00F0)>>8;
+	size_buffer[3] = (network_info.m_remaining_bytes&0x000F);
+
+	int bytes_sent = 0;
+	if (-1 == (bytes_sent=::send(network_info.m_socket_fd, size_buffer, 4, DEFAULT_SEND_FLAGS)) ||
+			4 != bytes_sent)
+	{
+		return false;
 	}
+
+	network_info.m_buffer_pos = 0;
+	return ContinueSendBuffer(network_info);
+}
+
+bool ContinueSendBuffer(NetworkInfo& network_info)
+{
+	if (network_info.m_buffer_length > network_info.m_remaining_bytes)
+		return false;
+
+	size_t total_bytes_sent = 0;
+	int bytes_sent;
+	while (total_bytes_sent < network_info.m_buffer_length)
+	{
+		if (-1 == (bytes_sent=::send(network_info.m_socket_fd,
+		                             network_info.m_buffer+total_bytes_sent,
+		                             network_info.m_buffer_length-total_bytes_sent,
+		                             DEFAULT_SEND_FLAGS)))
+		{
+			return false;
+		}
+
+		fprintf(stdout, "Sent %d of %d bytes\n", bytes_sent, (int)(network_info.m_remaining_bytes));
+
+		total_bytes_sent += bytes_sent;
+		network_info.m_remaining_bytes -= bytes_sent;
+	}
+
 	return true;
 }
 
-void SkipCharacter(int socket_fd, char ch, char*& network_buffer, size_t& buffer_pos)
+bool StartRecvBuffer(NetworkInfo& network_info)
+{
+	uint8_t size_buffer[4];
+	int bytes_received;
+	if (-1 == (bytes_received=::recv(network_info.m_socket_fd, size_buffer, 4, DEFAULT_RECV_FLAGS)) ||
+	    4 != bytes_received)
+	{
+		return false;
+	}
+
+	network_info.m_buffer_pos = 0;
+	network_info.m_remaining_bytes = (size_t)(size_buffer[0])<<24 | (size_t)(size_buffer[1])<<16 | (size_t)(size_buffer[2])<<8 | size_buffer[3];
+	return ContinueRecvBuffer(network_info);
+}
+
+bool ContinueRecvBuffer(NetworkInfo& network_info)
+{
+	if (0 < network_info.LeftToParse())
+	{
+		memmove(network_info.Buf(), network_info.m_buffer+network_info.m_buffer_pos, network_info.LeftToParse());
+		network_info.m_buffer_pos = network_info.LeftToParse();
+	}
+
+	time_t start_time = ::time(NULL);
+	size_t bytes_to_receive = MIN(network_info.m_buffer_length-network_info.m_buffer_pos,network_info.m_remaining_bytes);
+	size_t total_bytes_received = 0;
+	int bytes_received;
+	while (total_bytes_received < bytes_to_receive)
+	{
+		if (-1 == (bytes_received=::recv(network_info.m_socket_fd,
+		                                 network_info.Buf()+network_info.m_buffer_pos+total_bytes_received,
+		                                 network_info.m_buffer_length-total_bytes_received,
+		                                 DEFAULT_SEND_FLAGS)))
+		{
+			return false;
+		}
+
+		fprintf(stdout, "Received %d of %d bytes\n", bytes_received, (int)(network_info.m_remaining_bytes));
+
+		total_bytes_received += bytes_received;
+		network_info.m_remaining_bytes -= bytes_received;
+
+		if (0 < network_info.m_remaining_bytes)
+		{
+			if (TIMEOUT < (time(NULL)-start_time))
+				return false;
+
+			//Sleep half a second
+			struct timespec ts;
+			ts.tv_sec = 0;
+			ts.tv_nsec = 500*1000*1000;
+			::nanosleep(&ts, NULL);
+		}
+	}
+
+	return true;
+}
+
+void SkipCharacter(NetworkInfo& network_info, char ch)
 {
 	while (true)
 	{
-		if (0 == network_buffer[buffer_pos])
-		{
-			int received_bytes = recv(socket_fd, network_buffer, NETWORK_BUFFER_LENGTH, DEFAULT_RECV_FLAGS);
-			if (-1 == received_bytes) return;
-			
-			network_buffer[received_bytes] = 0;
-			buffer_pos = 0;
-		}
-
-		if (ch != network_buffer[buffer_pos])
+		if (network_info.m_buffer_pos >= network_info.m_buffer_length && !ContinueRecvBuffer(network_info))
 			return;
 
-		buffer_pos++;
+		if (ch != network_info.m_buffer[network_info.m_buffer_pos])
+			return;
+
+		network_info.m_buffer_pos++;
 	}
 }
 
-bool ParseInt(int socket_fd, char*& network_buffer, size_t& buffer_pos, int& result)
+bool ParseInt(NetworkInfo& network_info, int& result)
 {
-	SkipCharacter(socket_fd, ' ', network_buffer, buffer_pos);
+	SkipCharacter(network_info, ' ');
 
 	bool found_result = false;
 	result = 0;
-	while (true)
+	char ch;
+	while (0 < network_info.m_remaining_bytes)
 	{
-		if (0 == network_buffer[buffer_pos])
-		{
-			int received_bytes = recv(socket_fd, network_buffer, NETWORK_BUFFER_LENGTH, DEFAULT_RECV_FLAGS);
-			if (-1 == received_bytes) break;
-			
-			network_buffer[received_bytes] = 0;
-			buffer_pos = 0;
-		}
+		if (network_info.m_buffer_pos >= network_info.m_buffer_length && !ContinueRecvBuffer(network_info))
+			return false;
 
-		if ('0'>network_buffer[buffer_pos] || '9'<network_buffer[buffer_pos]) break;
+		ch = network_info.m_buffer[network_info.m_buffer_pos];
+		if ('0'>ch || '9'<ch) break;
 
 		found_result = true;
-		result = result*10 + network_buffer[buffer_pos++]-'0';
+		result = result*10 + ch-'0';
+		network_info.m_buffer_pos++;
 	}
 	return found_result;
 }
 
-bool ParseString(int socket_fd, char*& network_buffer, size_t& buffer_pos, std::string& result)
+bool ParseString(NetworkInfo& network_info, std::string& result)
 {
-	SkipCharacter(socket_fd, ' ', network_buffer, buffer_pos);
+	SkipCharacter(network_info, ' ');
 
 	bool found_result = false;
 	result.clear();
-	while (true)
+	char ch;
+	while (0 < network_info.m_remaining_bytes)
 	{
-		if (0 == network_buffer[buffer_pos])
-		{
-			int received_bytes = recv(socket_fd, network_buffer, NETWORK_BUFFER_LENGTH, DEFAULT_RECV_FLAGS);
-			if (-1 == received_bytes) break;
-			
-			network_buffer[received_bytes] = 0;
-			buffer_pos = 0;
-		}
+		if (network_info.m_buffer_pos >= network_info.m_buffer_length && !ContinueRecvBuffer(network_info))
+			return false;
 
-		if ('A'>network_buffer[buffer_pos] || 'Z'<network_buffer[buffer_pos]) break;
+		ch = network_info.m_buffer[network_info.m_buffer_pos];
+		if ('A'>ch || 'Z'<ch) break;
 
 		found_result = true;
-		result.append(1, network_buffer[buffer_pos++]);
+		result.append(1, ch);
+		network_info.m_buffer_pos++;
 	}
 	return found_result;
 }

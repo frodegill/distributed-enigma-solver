@@ -28,12 +28,28 @@
 # define DEFAULT_PORT  "2720" //Same as above, as string
 #endif
 
+#define TIMEOUT (60)
+
 #define NOT_FOUND (-1)
 #define EQUAL (0)
 #define NETWORK_BUFFER_LENGTH (8*1024)
 #define DEFAULT_SEND_FLAGS (0)
 #define DEFAULT_RECV_FLAGS (0)
 
+#define MIN(x,y) ((x)<(y)?(x):(y))
+#define MAX(x,y) ((x)>(y)?(x):(y))
+
+
+struct NetworkInfo
+{
+	int m_socket_fd;
+	size_t m_remaining_bytes;
+	const char* m_buffer;
+	size_t m_buffer_length;
+	size_t m_buffer_pos;
+	char* Buf() const {return (char*)m_buffer;}
+	size_t LeftToParse() const {return m_buffer_length-m_buffer_pos;}
+};
 
 struct PacketInfo
 {
@@ -46,8 +62,12 @@ struct PacketInfo
 	void Increment();
 };
 
-bool SendBuffer(int socket_fd, const char* buffer, size_t buffer_length);
+bool StartSendBuffer(NetworkInfo& network_info);
+bool ContinueSendBuffer(NetworkInfo& network_info);
 
-void SkipCharacter(int socket_fd, char ch, char*& network_buffer, size_t& buffer_pos);
-bool ParseInt(int socket_fd, char*& network_buffer, size_t& buffer_pos, int& result);
-bool ParseString(int socket_fd, char*& network_buffer, size_t& buffer_pos, std::string& result);
+bool StartRecvBuffer(NetworkInfo& network_info);
+bool ContinueRecvBuffer(NetworkInfo& network_info);
+
+void SkipCharacter(NetworkInfo& network_info, char ch);
+bool ParseInt(NetworkInfo& network_info, int& result);
+bool ParseString(NetworkInfo& network_info, std::string& result);

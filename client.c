@@ -18,12 +18,18 @@
 #define OVERFLOW_BASE (2) //Pointer to start of middle block
 
 
-
+const char* g_hostname;
+const char* g_port;
 char* g_network_buffer;
+
+bool g_done = false;
 
 int g_bigrams[CHAR_COUNT][CHAR_COUNT];
 int g_trigrams[CHAR_COUNT][CHAR_COUNT][CHAR_COUNT];
 int g_quadgrams[CHAR_COUNT][CHAR_COUNT][CHAR_COUNT][CHAR_COUNT];
+
+uint8_t* g_encrypted_text = NULL;
+PacketInfo* g_reflector_ring_settings = NULL;
 
 uint8_t g_reflector_definitions[REFLECTOR_COUNT][OVERFLOW_PROTECTION*CHAR_COUNT];
 uint8_t g_ring_definitions[RING_COUNT][OVERFLOW_PROTECTION*CHAR_COUNT];
@@ -113,6 +119,7 @@ int CreateSocket(const char* hostname, const char* port) // Code based on Beej's
 
 		if (connect(socket_fd, p->ai_addr, p->ai_addrlen) == -1) {
 			close(socket_fd);
+			fprintf(stderr, "Closed socket %d\n", socket_fd);
 			perror("client: connect");
 			continue;
 		}
@@ -157,44 +164,144 @@ void ParseQuadgram(const std::string& word) {
 	}
 }
 
-bool ParseWordlist(int socket_fd, char*& network_buffer, size_t& buffer_pos)
+bool ParseWordlist(NetworkInfo& network_info)
 {
-	fprintf(stdout, "Generate bi-/tri-/quad-grams from wordlist\n");
+	fprintf(stdout, "Generate bi-/tri-/quadgrams from wordlist:\n");
 	memset(g_bigrams, 0, CHAR_COUNT*CHAR_COUNT*sizeof(int));
 	memset(g_trigrams, 0, CHAR_COUNT*CHAR_COUNT*CHAR_COUNT*sizeof(int));
 	memset(g_quadgrams, 0, CHAR_COUNT*CHAR_COUNT*CHAR_COUNT*CHAR_COUNT*sizeof(int));
 
 	std::string word;
-	if (!ParseString(socket_fd, network_buffer, buffer_pos, word) || EQUAL!=word.compare("WORDS")) return false;
-	
-	while (true)
-	{
-		if (!ParseString(socket_fd, network_buffer, buffer_pos, word)) return false;
-		if (EQUAL==word.compare("\n")) break;
+	if (!ParseString(network_info, word) || EQUAL!=word.compare("WORDS")) return false;
 
-		fprintf(stdout, "%s\n", word.c_str());
+	while (0 < network_info.m_remaining_bytes)
+	{
+		if (!ParseString(network_info, word))
+			return false;
+
+		fprintf(stdout, " \"%s\"\n", word.c_str());
 		if (2<=word.length()) ParseBigram(word);
 		if (3<=word.length()) ParseTrigram(word);
 		if (4<=word.length()) ParseQuadgram(word);
 
-		SkipCharacter(socket_fd, ',', network_buffer, buffer_pos);
+		SkipCharacter(network_info, ',');
 	}
 
 	return true;
 }
 
-void InitializeWork(int socket_fd)
+bool ParseEncryptedText(NetworkInfo& network_info)
 {
-	if (!SendBuffer(socket_fd, "NEW\n", 4))
-		return;
+	std::string text;
+	if (!ParseString(network_info, text) || EQUAL!=text.compare("TEXT")) return false;
+	if (!ParseString(network_info, text)) return false;
 
-	size_t buffer_pos = 0;
-	g_network_buffer[buffer_pos] = 0;
-	ParseWordlist(socket_fd, g_network_buffer, buffer_pos);
+	fprintf(stdout, "Encrypted text:\n");
+	fprintf(stdout, " \"%s\"\n", text.c_str());
+	g_encrypted_text = new uint8_t[text.length()];
+	size_t i;
+	for (i=0; i<text.length(); i++)
+	{
+		g_encrypted_text[i] = text[i]-'A';
+	}
+
+	return (0 == network_info.m_remaining_bytes);
 }
 
-void MainLoop()
+bool ParseSetting(NetworkInfo& network_info)
 {
+	std::string text;
+	int setting;
+	if (!ParseString(network_info, text)) return false;
+
+	if (EQUAL==text.compare("DONE"))
+	{
+		g_done = true;
+		return true;
+	}
+
+	if (EQUAL!=text.compare("SETTING")) return false;
+	
+	if (!ParseInt(network_info, setting)) return false;
+
+	delete g_reflector_ring_settings;
+	g_reflector_ring_settings = new PacketInfo(setting);
+
+	fprintf(stdout, "Current packet: %c %c%c%c\n", g_reflector_ring_settings->m_reflector+'B',
+	                                               g_reflector_ring_settings->m_rings[LEFT]+'1',
+	                                               g_reflector_ring_settings->m_rings[MIDDLE]+'1',
+	                                               g_reflector_ring_settings->m_rings[RIGHT]+'1');
+
+	return (0 == network_info.m_remaining_bytes);
+}
+
+void MainLoop(int& socket_fd)
+{
+	NetworkInfo network_info;
+	network_info.m_socket_fd = socket_fd;
+	network_info.m_buffer = "NEW";
+	network_info.m_buffer_length = network_info.m_remaining_bytes = 3;
+	if (!StartSendBuffer(network_info) || 0!=network_info.m_remaining_bytes)
+		return;
+
+	network_info.m_buffer = g_network_buffer;
+	network_info.m_buffer_length = NETWORK_BUFFER_LENGTH;
+	if (!StartRecvBuffer(network_info) ||
+	    !ParseWordlist(network_info) || 0<network_info.m_remaining_bytes)
+	{
+		return;
+	}
+
+	if (!StartRecvBuffer(network_info) ||
+	    !ParseEncryptedText(network_info) || 0<network_info.m_remaining_bytes)
+	{
+		return;
+	}
+
+	while (!g_done)
+	{
+		network_info.m_buffer = g_network_buffer;
+		network_info.m_buffer_length = NETWORK_BUFFER_LENGTH;
+		if (!StartRecvBuffer(network_info) ||
+		    !ParseSetting(network_info) || 0<network_info.m_remaining_bytes)
+		{
+			break;
+		}
+
+		close(socket_fd);
+		fprintf(stderr, "Closed socket %d\n", socket_fd);
+		socket_fd = -1;
+
+		//Calculate
+
+		//Create socket, send result, loop and read next packet info
+		socket_fd = CreateSocket(g_hostname, g_port);
+		if (-1 == socket_fd)
+		{
+			fprintf(stderr, "Connecting to server failed\n");
+			return;
+		}
+		fprintf(stderr, "Created socket %d\n", socket_fd);
+
+		int score = 0;
+		int ring_key_setting = 0;
+		std::string plugboard="ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+		std::string plaintext="TODO";
+		sprintf(network_info.Buf(), "DONE %d %d %d %s ", g_reflector_ring_settings->ToInt(), score, ring_key_setting, plugboard.c_str());
+		network_info.m_buffer_length = strlen(network_info.m_buffer);
+		network_info.m_remaining_bytes = network_info.m_buffer_length+plaintext.length();
+		if (!StartSendBuffer(network_info))
+		{
+			return;
+		}
+
+		network_info.m_buffer = plaintext.c_str();
+		network_info.m_buffer_length = plaintext.length();
+		if (!ContinueSendBuffer(network_info) || 0!=network_info.m_remaining_bytes)
+		{
+			return;
+		}
+	}
 }
 
 void PrintUsage()
@@ -213,27 +320,36 @@ int main(int argc, char* argv[])
 
 	InitializeEnigma();
 
-	int socket = CreateSocket(argv[1], 3 <= argc ? argv[2] : DEFAULT_PORT);
+	g_hostname = argv[1];
+	g_port = (3 <= argc ? argv[2] : DEFAULT_PORT);
+	int socket = CreateSocket(g_hostname, g_port);
 	if (-1 == socket)
 	{
 		fprintf(stderr, "Connecting to server failed\n");
 		return -1;
 	}
+	fprintf(stderr, "Created socket %d\n", socket);
 
 	g_network_buffer = new char[NETWORK_BUFFER_LENGTH+1];
-
 	if (!g_network_buffer)
 	{
-		fprintf(stderr, "Allocating memory failed\n");
+		fprintf(stderr, "Allocating network buffer failed\n");
 		close(socket);
+		fprintf(stderr, "Closeded socket %d\n", socket);
 		return -1;
 	}
+	g_network_buffer[NETWORK_BUFFER_LENGTH] = 0;
 
-	InitializeWork(socket);
-
-	MainLoop();
-	close(socket);
+	MainLoop(socket);
+	if (-1 != socket)
+	{
+		close(socket);
+		fprintf(stderr, "Closed socket %d\n", socket);
+	}
 
 	delete[] g_network_buffer;
+
+	delete g_reflector_ring_settings;
+	delete[] g_encrypted_text;
 	return 0;
 }
