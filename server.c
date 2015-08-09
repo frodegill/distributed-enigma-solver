@@ -364,7 +364,8 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 
 void MainLoop(int socket_fd)
 {
-	PacketInfo packet_info(0);
+	PacketInfo packet_info;
+	packet_info.FromInt(0);
 	NetworkInfo network_info;
 	while (PACKET_COUNT > packet_info.m_packet_number)
 	{

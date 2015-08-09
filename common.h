@@ -69,7 +69,7 @@ struct PacketInfo
 	int m_reflector;
 	int m_rings[3];
 
-	PacketInfo(int packet_number);
+	void FromInt(int packet_number);
 	int ToInt() const;
 	void Increment();
 };

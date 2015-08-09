@@ -11,7 +11,7 @@
 #include <time.h>
 
 
-PacketInfo::PacketInfo(int packet_number)
+void PacketInfo::FromInt(int packet_number)
 {
 	m_packet_number = packet_number;
 	m_reflector = packet_number/(RING_COUNT*RING_COUNT*RING_COUNT); packet_number-=m_reflector*RING_COUNT*RING_COUNT*RING_COUNT;

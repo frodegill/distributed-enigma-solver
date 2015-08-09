@@ -225,8 +225,7 @@ bool ParseSetting(NetworkInfo& network_info)
 	
 	if (!ParseInt(network_info, setting)) return false;
 
-	delete g_reflector_ring_settings;
-	g_reflector_ring_settings = new PacketInfo(setting);
+	g_reflector_ring_settings->FromInt(setting);
 
 	fprintf(stdout, "Current packet: %c %c%c%c\n", g_reflector_ring_settings->m_reflector+'B',
 	                                               g_reflector_ring_settings->m_rings[LEFT]+'1',
@@ -234,6 +233,10 @@ bool ParseSetting(NetworkInfo& network_info)
 	                                               g_reflector_ring_settings->m_rings[RIGHT]+'1');
 
 	return (0 == network_info.m_remaining_bytes);
+}
+
+void Calculate()
+{
 }
 
 void MainLoop(int& socket_fd)
@@ -295,6 +298,7 @@ void MainLoop(int& socket_fd)
 			socket_fd = -1;
 
 			//Calculate
+			Calculate();
 
 			//Create socket, send result, loop and read next packet info
 			socket_fd = CreateSocket(g_hostname, g_port);
