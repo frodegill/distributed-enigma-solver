@@ -10,3 +10,9 @@ passwd
 # Application files
 enigma-solver-client
 enigma-solver-server
+
+#soft-links
+client/common.h
+client/common.c
+server/common.h
+server/common.c

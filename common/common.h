@@ -1,3 +1,6 @@
+#ifndef _COMMON_H_
+#define _COMMON_H_
+
 /*
  *  enigma-solver-common
  *
@@ -8,6 +11,7 @@
 #include <netdb.h>
 #include <string>
 
+#define CHAR_COUNT (26)
 
 #define REFLECTOR_COUNT (2) //B and C
 #define ROTOR_COUNT (3) //M3
@@ -83,3 +87,5 @@ bool ContinueRecvBuffer(NetworkInfo& network_info);
 void SkipCharacter(NetworkInfo& network_info, char ch);
 bool ParseInt(NetworkInfo& network_info, int& result);
 bool ParseString(NetworkInfo& network_info, std::string& result);
+
+#endif // _COMMON_H_
