@@ -6,13 +6,12 @@
  */
 
 #include "common.h"
+#include "plugboard.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <cstdio>
 #include <cstring>
 #include <unistd.h>
-
-#define CHAR_COUNT (26)
 
 #define OVERFLOW_PROTECTION (5) //From n-1-1 to n+1+1, to avoid range checking when adjusting for ring- and key-setting
 #define OVERFLOW_BASE (2) //Pointer to start of middle block
@@ -173,7 +172,7 @@ bool ParseWordlist(NetworkInfo& network_info)
 	memset(g_quadgrams, 0, CHAR_COUNT*CHAR_COUNT*CHAR_COUNT*CHAR_COUNT*sizeof(int));
 
 	std::string word;
-	if (!ParseString(network_info, word) || EQUAL!=word.compare("WORDS")) return false;
+	if (!ParseString(network_info, word) || EQUAL_STR!=word.compare("WORDS")) return false;
 
 	while (network_info.m_parsed_pos < (network_info.m_available_bytes+network_info.m_remaining_bytes))
 	{
@@ -194,7 +193,7 @@ bool ParseWordlist(NetworkInfo& network_info)
 bool ParseEncryptedText(NetworkInfo& network_info)
 {
 	std::string text;
-	if (!ParseString(network_info, text) || EQUAL!=text.compare("TEXT")) return false;
+	if (!ParseString(network_info, text) || EQUAL_STR!=text.compare("TEXT")) return false;
 	if (!ParseString(network_info, text)) return false;
 
 	fprintf(stdout, "Encrypted text:\n");
@@ -215,13 +214,13 @@ bool ParseSetting(NetworkInfo& network_info)
 	int setting;
 	if (!ParseString(network_info, text)) return false;
 
-	if (EQUAL==text.compare("DONE"))
+	if (EQUAL_STR==text.compare("DONE"))
 	{
 		g_done = true;
 		return true;
 	}
 
-	if (EQUAL!=text.compare("SETTING")) return false;
+	if (EQUAL_STR!=text.compare("SETTING")) return false;
 	
 	if (!ParseInt(network_info, setting)) return false;
 
@@ -345,7 +344,7 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 
-	if (EQUAL==strcmp(argv[argc-1], "--status"))
+	if (EQUAL_STR==strcmp(argv[argc-1], "--status"))
 	{
 		g_request_status = true;
 		argc--;

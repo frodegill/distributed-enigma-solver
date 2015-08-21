@@ -255,7 +255,7 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 			return;
 	}
 
-	if (EQUAL == command.compare("STATUS"))
+	if (EQUAL_STR == command.compare("STATUS"))
 	{
 		fprintf(stdout, "Received STATUS\n");
 
@@ -279,7 +279,7 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 
 		fprintf(stdout, "Handled STATUS\n");
 	}
-	else if (EQUAL == command.compare("NEW"))
+	else if (EQUAL_STR == command.compare("NEW"))
 	{
 		fprintf(stdout, "Received NEW\n");
 
@@ -311,7 +311,7 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 
 		fprintf(stdout, "Handled NEW\n");
 	}
-	else if (EQUAL == command.compare("DONE")) //"DONE <setting> <score> <ring/key-settings> <plugboard> <plaintext>"
+	else if (EQUAL_STR == command.compare("DONE")) //"DONE <setting> <score> <ring/key-settings> <plugboard> <plaintext>"
 	{
 		fprintf(stdout, "Received DONE\n");
 

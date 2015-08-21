@@ -35,7 +35,9 @@
 #define TIMEOUT (60)
 
 #define NOT_FOUND (-1)
-#define EQUAL (0)
+#define EQUAL_STR (0)
+#define EQUAL (true)
+#define NOT_EQUAL (false)
 #define NETWORK_BUFFER_LENGTH (8*1024)
 #define DEFAULT_SEND_FLAGS (0)
 #define DEFAULT_RECV_FLAGS (0)
