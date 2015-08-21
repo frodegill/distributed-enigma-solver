@@ -7,11 +7,12 @@
 
 #include "plugboard.h"
 #include <cstdio>
+#include <stdlib.h>
 
 
 void Plugboard::Initialize()
 {
-	int i;
+	uint8_t i;
 	for (i=0; i<CHAR_COUNT; i++)
 	{
 		m_plugboard[i] = i;
@@ -22,40 +23,105 @@ void Plugboard::Initialize()
 
 bool Plugboard::SwapNext()
 {
-	m_tmp_c = m_plugboard[m_c1];
-	m_plugboard[m_c1] = m_plugboard[m_c2];
-	m_plugboard[m_c2] = m_tmp_c;
+	RevertSwapHistoryStack();
 
-	do
+	if (CHAR_COUNT <= m_swapchar[0])
+		return NO_MORE;
+
+	if (m_swap_bflag&INCREMENT_AND_CONTINUE)
 	{
-		if (CHAR_COUNT<=++m_c2)
-		{
-			if (CHAR_COUNT<=++m_c1)
-			{
-				return false;
-			}
-			m_c2=0;
-		}
-	} while (m_c1>=m_c2);
+		if (!IncrementAndSkipRedundantPlugSettings())
+			return NO_MORE;
 
-	m_tmp_c = m_plugboard[m_c1];
-	m_plugboard[m_c1] = m_plugboard[m_c2];
-	m_plugboard[m_c2] = m_tmp_c;
-	return true;
+		m_swap_bflag &= ~INCREMENT_AND_CONTINUE;
+	}
+	
+	if (REVERT_NONE != m_swap_bflag)
+	{
+		uint8_t tmp_c0 = m_plugboard[m_swapchar[0]];
+		uint8_t tmp_c1 = m_plugboard[m_swapchar[1]];
+
+		if(m_swap_bflag&(REVERT_P1|REVERT_P1_AND_P2))
+		{
+			Swap(m_swapchar[0], tmp_c0, true);
+		}
+		if(m_swap_bflag&(REVERT_P2|REVERT_P1_AND_P2))
+		{
+			Swap(m_swapchar[1], tmp_c1, true);
+		}
+
+		if (m_swap_bflag&REVERT_P1)
+		{
+			Swap(tmp_c0, m_swapchar[1], true);
+			m_swap_bflag &= ~REVERT_P1;
+		}
+		else if (m_swap_bflag&REVERT_P2)
+		{
+			Swap(tmp_c1, m_swapchar[0], true);
+			m_swap_bflag &= ~REVERT_P2;
+		}
+		else //REVERT_P1_AND_P2
+		{
+			Swap(tmp_c0, tmp_c1, true);
+			m_swap_bflag = REVERT_NONE;
+		}
+
+		if (REVERT_NONE==m_swap_bflag)
+		{
+			m_swap_bflag = INCREMENT_AND_CONTINUE;
+		}
+	}
+	else
+	{
+		if (!(m_plugboard[m_swapchar[0]]==m_swapchar[1] && m_plugboard[m_swapchar[1]]==m_swapchar[0]))
+		{
+			if (m_plugboard[m_swapchar[0]] != m_swapchar[0])
+				m_swap_bflag|=REVERT_P1;
+
+			if (m_plugboard[m_swapchar[1]] != m_swapchar[1])
+				m_swap_bflag|=REVERT_P2;
+
+			if ((REVERT_P1|REVERT_P2)==(m_swap_bflag&(REVERT_P1|REVERT_P2)))
+				m_swap_bflag|=REVERT_P1_AND_P2;
+
+			if(m_swap_bflag&(REVERT_P1|REVERT_P1_AND_P2))
+				Swap(m_swapchar[0], m_plugboard[m_swapchar[0]], true);
+
+			if(m_swap_bflag&(REVERT_P2|REVERT_P1_AND_P2))
+				Swap(m_swapchar[1], m_plugboard[m_swapchar[1]], true);
+
+			Swap(m_swapchar[0], m_swapchar[1], true);
+
+			if (0 != (m_swap_bflag&(REVERT_P1|REVERT_P2|REVERT_P1_AND_P2)))
+			{
+				return MORE;
+			}
+		}
+
+		m_swap_bflag |= INCREMENT_AND_CONTINUE;
+	}
+
+	return MORE;
 }
 
 void Plugboard::operator=(const Plugboard& src)
 {
-	int i;
+	uint8_t i;
 	for (i=0; i<CHAR_COUNT; i++)
 	{
 		m_plugboard[i] = src.m_plugboard[i];
+		m_plugboard_backup[i] = src.m_plugboard_backup[i];
 	}
+	for (i=0; i<MAX_SWAP_COUNT; i++)
+	{
+		m_swapchar[i] = src.m_swapchar[i];
+	}
+	m_swap_bflag = src.m_swap_bflag;
 }
 
 void Plugboard::Push()
 {
-	int i;
+	uint8_t i;
 	for (i=0; i<CHAR_COUNT; i++)
 	{
 		m_plugboard_backup[i] = m_plugboard[i];
@@ -64,25 +130,119 @@ void Plugboard::Push()
 
 void Plugboard::Pop()
 {
-	int i;
+	uint8_t i;
 	for (i=0; i<CHAR_COUNT; i++)
 	{
 		m_plugboard[i] = m_plugboard_backup[i];
+	}
+	Reset();
+}
+
+void Plugboard::RevertSwapHistoryStack()
+{
+	while (1 < m_swap_history_count)
+	{
+		Swap(m_swap_history_stack[m_swap_history_count-1], m_swap_history_stack[m_swap_history_count-2], false);
+		m_swap_history_count -= 2;
 	}
 }
 
 void Plugboard::Reset()
 {
-	m_c1 = m_c2 = 0;
+	m_swap_bflag = REVERT_NONE;
+	m_swapchar[0] = m_swapchar[1] = 0;
+	m_swap_history_count = 0;
 }
 
-void Plugboard::Print()
+void Plugboard::ToString(std::string& str, bool include_compressed) const
 {
-	std::string s;
-	int i;
+	str.empty();
+	uint8_t i;
 	for (i=0; i<CHAR_COUNT; i++)
 	{
-		s.append(1, (char)(m_plugboard[i]+'A'));
+		str.append(1, (char)(m_plugboard[i]+'A'));
 	}
-	fprintf(stdout, "%s\n", s.c_str());
+
+	if (include_compressed)
+	{
+		str.append(" [ ");
+		for (i=0; i<CHAR_COUNT; i++)
+		{
+			if (m_plugboard[i] > i)
+			{
+				str.append(1, (char)(i+'A'));
+				str.append(1, '-');
+				str.append(1, (char)(m_plugboard[i]+'A'));
+				str.append(1, ' ');
+			}
+		}
+		str.append(1, ']');
+	}
+}
+
+bool Plugboard::Swap(int8_t c1, int8_t c2, bool add_to_history_stack)
+{
+#ifdef DEBUG
+	if (c1==c2)
+	{
+		fprintf(stdout, "Plug %c swaps to itself\n", (char)(c1+'A'));
+		exit(-1);
+	}
+	if (m_plugboard[c1]!=c1 && m_plugboard[c1]!=c2)
+	{
+		fprintf(stdout, "Plug %c already swapped\n", (char)(c1+'A'));
+		exit(-1);
+	}
+	if (m_plugboard[c2]!=c2 && m_plugboard[c2]!=c1)
+	{
+		fprintf(stdout, "Plug %c already swapped\n", (char)(c2+'A'));
+		exit(-1);
+	}
+#endif
+
+	uint8_t tmp_c = m_plugboard[c1];
+	m_plugboard[c1] = m_plugboard[c2];
+	m_plugboard[c2] = tmp_c;
+	if (add_to_history_stack)
+	{
+#ifdef DEBUG
+		if ((m_swap_history_count+2) > MAX_SWAP_COUNT)
+		{
+			fprintf(stdout, "Max swap history count reached\n");
+			exit(-1);
+		}
+#endif
+		m_swap_history_stack[m_swap_history_count++] = c1;
+		m_swap_history_stack[m_swap_history_count++] = c2;
+	}
+	return true;
+}
+
+bool Plugboard::SkipRedundantPlugSettings()
+{
+	while (m_swapchar[0]>=m_swapchar[1]) //Only test where swapchar[0]<swapchar[1]. By mirroring we know the rest is already taken care of
+	{
+		if (CHAR_COUNT<=++m_swapchar[1])
+		{
+			if (CHAR_COUNT<=++m_swapchar[0])
+			{
+				return NO_MORE;
+			}
+			m_swapchar[1]=0;
+		}
+	}
+	return MORE;
+}
+
+bool Plugboard::IncrementAndSkipRedundantPlugSettings()
+{
+	if (CHAR_COUNT<=++m_swapchar[1])
+	{
+		if (CHAR_COUNT<=++m_swapchar[0])
+		{
+			return NO_MORE;
+		}
+		m_swapchar[1]=0;
+	}
+	return SkipRedundantPlugSettings();
 }

@@ -10,6 +10,18 @@
 
 #include "common.h"
 
+#define MAX_SWAP_COUNT (6)
+#define MAX_SWAP_HISTORY_STACK_COUNT (6)
+
+#define MORE    (true)
+#define NO_MORE (false)
+
+#define REVERT_NONE            (0)
+#define REVERT_P1              (1<<0)
+#define REVERT_P2              (1<<1)
+#define REVERT_P1_AND_P2       (1<<2)
+#define INCREMENT_AND_CONTINUE (1<<3)
+
 
 class Plugboard
 {
@@ -19,15 +31,23 @@ public:
 	void operator=(const Plugboard& src);
 	void Push();
 	void Pop();
+	inline void RevertSwapHistoryStack();
 	void Reset();
-	void Print();
+	void ToString(std::string& str, bool include_compressed) const;
+
+	bool Swap(int8_t c1, int8_t c2, bool add_to_history_stack);
 
 private:
-	int m_plugboard[CHAR_COUNT];
-	int m_plugboard_backup[CHAR_COUNT];
-	int m_c1;
-	int m_c2;
-	int m_tmp_c;
+	inline bool SkipRedundantPlugSettings();
+	inline bool IncrementAndSkipRedundantPlugSettings();
+
+private:
+	uint8_t m_plugboard[CHAR_COUNT];
+	uint8_t m_plugboard_backup[CHAR_COUNT];
+	uint8_t m_swapchar[MAX_SWAP_COUNT];
+	uint8_t m_swap_bflag;
+	uint8_t m_swap_history_stack[MAX_SWAP_HISTORY_STACK_COUNT];
+	uint8_t m_swap_history_count;
 };
 
 #endif // _PLUGBOARD_H_
