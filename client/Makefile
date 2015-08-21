@@ -13,7 +13,7 @@ CLIENT_OBJECTS = $(CLIENT_SOURCES:.c=.o)
 CXXFLAGS = -I/usr/include -W -Wall -Werror -pipe
 LIBSFLAGS = -L/usr/lib
 ifdef DEBUG_INFO
- CXXFLAGS += -g
+ CXXFLAGS += -g -DDEBUG
 else
  CXXFLAGS += -O3
 endif
