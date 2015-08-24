@@ -5,36 +5,14 @@
  *  This code is GPLv3.
  */
 
-#include "common.h"
+#include "client.h"
+#include "keysetting.h"
 #include "plugboard.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <cstdio>
 #include <cstring>
 #include <unistd.h>
-
-#define OVERFLOW_PROTECTION (5) //From n-1-1 to n+1+1, to avoid range checking when adjusting for ring- and key-setting
-#define OVERFLOW_BASE (2) //Pointer to start of middle block
-
-
-const char* g_hostname;
-const char* g_port;
-char* g_network_buffer;
-
-bool g_request_status = false;
-bool g_done = false;
-
-int g_bigrams[CHAR_COUNT][CHAR_COUNT];
-int g_trigrams[CHAR_COUNT][CHAR_COUNT][CHAR_COUNT];
-int g_quadgrams[CHAR_COUNT][CHAR_COUNT][CHAR_COUNT][CHAR_COUNT];
-
-uint8_t* g_encrypted_text = NULL;
-PacketInfo* g_reflector_ring_settings = NULL;
-
-uint8_t g_reflector_definitions[REFLECTOR_COUNT][OVERFLOW_PROTECTION*CHAR_COUNT];
-uint8_t g_ring_definitions[RING_COUNT][OVERFLOW_PROTECTION*CHAR_COUNT];
-uint8_t g_inverse_ring_definitions[RING_COUNT][OVERFLOW_PROTECTION*CHAR_COUNT];
-uint32_t g_ring_turnover_positions[RING_COUNT];
 
 
 void InitializeEnigma()
@@ -236,6 +214,121 @@ bool ParseSetting(NetworkInfo& network_info)
 
 void Calculate()
 {
+	KeySetting key_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
+	KeySetting tmp_key_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
+
+	key_setting.InitializeStartPosition();
+	do
+	{
+		tmp_key_setting = key_setting;
+
+	} while (key_setting.IncrementStartPosition());
+
+#if 0
+				for (encryptedCharIndex=0; encryptedCharIndex<encryptedText.length; encryptedCharIndex++) {
+
+						//Step rotor(s).
+						stepRings(ringTurnoverPositions, ring, tmpKeySetting);
+
+						//Precalc all paths for current encryptedCharIndex
+						for (precalcIndex = 0; precalcIndex < CHARCOUNT; precalcIndex++) {
+								ch = precalcIndex;
+								ch = ringDefinitions[ring[RIGHT]][OVERFLOWBASE * CHARCOUNT + ch - ringSetting[RIGHT] + tmpKeySetting[RIGHT]] - tmpKeySetting[RIGHT] + ringSetting[RIGHT];
+								ch = ringDefinitions[ring[MIDDLE]][OVERFLOWBASE * CHARCOUNT + ch - ringSetting[MIDDLE] + tmpKeySetting[MIDDLE]] - tmpKeySetting[MIDDLE] + ringSetting[MIDDLE];
+								ch = ringDefinitions[ring[LEFT]][OVERFLOWBASE * CHARCOUNT + ch - ringSetting[LEFT] + tmpKeySetting[LEFT]] - tmpKeySetting[LEFT] + ringSetting[LEFT];
+								ch = reflectorDefinitions[reflector][OVERFLOWBASE * CHARCOUNT + ch];
+								ch = inverseRingDefinitions[ring[LEFT]][OVERFLOWBASE * CHARCOUNT + ch - ringSetting[LEFT] + tmpKeySetting[LEFT]] - tmpKeySetting[LEFT] + ringSetting[LEFT];
+								ch = inverseRingDefinitions[ring[MIDDLE]][OVERFLOWBASE * CHARCOUNT + ch - ringSetting[MIDDLE] + tmpKeySetting[MIDDLE]] - tmpKeySetting[MIDDLE] + ringSetting[MIDDLE];
+								ch = inverseRingDefinitions[ring[RIGHT]][OVERFLOWBASE * CHARCOUNT + ch - ringSetting[RIGHT] + tmpKeySetting[RIGHT]] - tmpKeySetting[RIGHT] + ringSetting[RIGHT];
+								while (ch < 0) ch += CHARCOUNT;
+								while (ch >= CHARCOUNT) ch -= CHARCOUNT;
+								precalcPlugPaths[encryptedCharIndex*CHARCOUNT + precalcIndex] = ch;
+						}
+				}
+
+				//Initialize plugboard
+				for (i = 0; i < CHARCOUNT; i++) {
+						plugboard[i] = i;
+				}
+
+				tmpMaxIc = tmpMaxNgram = 0;
+				foundNewMaxNgram = true;
+				ngramClimbGPU.put(precalcPlugPaths);
+				//Hill-climb
+				while (foundNewMaxNgram) {
+
+						//N-gram climb
+						if (USE_GPU) {
+								ngramClimbGPU.put(hillclimbResult);
+								ngramClimbGPU.put(plugboard);
+
+								ngramClimbGPU.execute(range);
+								ngramClimbGPU.get(hillclimbResult);
+						} else {
+								for (gid = 0; gid < CHARCOUNT * CHARCOUNT; gid++) {
+										ngramClimbCPU(gid, bigrams, trigrams, quadgrams, plugboard, hillclimbResult, hillclimbDecodeBuffer, encryptedText, precalcPlugPaths);
+								}
+						}
+						foundNewMaxNgram = false;
+						for (gid=0; gid<CHARCOUNT*CHARCOUNT; gid++) {
+								if (hillclimbResult[gid] > tmpMaxNgram) {
+										tmpMaxNgram = hillclimbResult[gid];
+										maxNgramIndex = gid;
+										foundNewMaxNgram = true;
+								}
+						}
+						if (foundNewMaxNgram) {
+								int c1 = maxNgramIndex/CHARCOUNT;
+								int c2 = maxNgramIndex-(c1*CHARCOUNT);
+								int tmpCh = plugboard[c1];
+								plugboard[c1] = plugboard[c2];
+								plugboard[c2] = tmpCh;
+
+								if (tmpMaxNgram > maxNgram) {
+										maxNgram = tmpMaxNgram;
+										tmpMaxOptimizedNgram = optimizeRingSetting(encryptedText, maxOptimizedNgram,
+														bigrams, trigrams, quadgrams,
+														reflectorDefinitions, ringDefinitions, inverseRingDefinitions, ringTurnoverPositions,
+														reflector, ring, ringSetting, keySetting, plugboard);
+										if (tmpMaxOptimizedNgram > maxOptimizedNgram) {
+												maxOptimizedNgram = tmpMaxOptimizedNgram;
+										}
+								}
+						}
+
+						if (false && !foundNewMaxNgram) {
+								if (USE_GPU) {
+//                                                            icClimbGPU(gid, icScores, plugboard, hillclimbResult, hillclimbScoreBuffer, encryptedText, precalcPlugPaths);
+								} else {
+										for (gid = 0; gid < CHARCOUNT * CHARCOUNT; gid++) {
+												icClimbCPU(gid, icScores, plugboard, hillclimbResult, hillclimbScoreBuffer, encryptedText, precalcPlugPaths);
+										}
+								}
+								foundNewMaxIc = false;
+								for (gid=0; gid<CHARCOUNT*CHARCOUNT; gid++) {
+										if (hillclimbResult[gid] > tmpMaxIc) {
+												tmpMaxIc = hillclimbResult[gid];
+												maxIcIndex = gid;
+												foundNewMaxIc = true;
+										}
+								}
+								if (foundNewMaxIc) {
+										int c1 = maxIcIndex/CHARCOUNT;
+										int c2 = maxIcIndex-(c1*CHARCOUNT);
+										int tmpCh = plugboard[c1];
+										plugboard[c1] = plugboard[c2];
+										plugboard[c2] = tmpCh;
+
+										if (tmpMaxIc > maxIc) {
+												maxIc = tmpMaxIc;
+												lastLogTime = System.currentTimeMillis();
+												debugProgress(reflector, ring, ringSetting, keySetting, plugboard);
+												debugOutput("icScore:" + tmpMaxIc, encryptedText, precalcPlugPaths, plugboard);
+										}
+								}
+						}
+				}
+#endif
 }
 
 void MainLoop(int& socket_fd)
@@ -371,6 +464,7 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 	g_network_buffer[NETWORK_BUFFER_LENGTH] = 0;
+	g_reflector_ring_settings = new PacketInfo();
 
 	MainLoop(socket);
 	if (-1 != socket)

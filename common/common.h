@@ -72,8 +72,8 @@ public:
 struct PacketInfo
 {
 	int m_packet_number;
-	int m_reflector;
-	int m_rings[3];
+	uint8_t m_reflector;
+	uint8_t m_rings[3];
 
 	void FromInt(int packet_number);
 	int ToInt() const;

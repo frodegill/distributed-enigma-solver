@@ -117,6 +117,12 @@ void Plugboard::operator=(const Plugboard& src)
 		m_swapchar[i] = src.m_swapchar[i];
 	}
 	m_swap_bflag = src.m_swap_bflag;
+
+	m_swap_history_count = src.m_swap_history_count;
+	for (i=0; i<m_swap_history_count; i++)
+	{
+		m_swap_history_stack[i] = src.m_swap_history_stack[i];
+	}
 }
 
 void Plugboard::Push()
@@ -160,23 +166,23 @@ void Plugboard::ToString(std::string& str, bool include_compressed) const
 	uint8_t i;
 	for (i=0; i<CHAR_COUNT; i++)
 	{
-		str.append(1, (char)(m_plugboard[i]+'A'));
+		str += (char)(m_plugboard[i]+'A');
 	}
 
 	if (include_compressed)
 	{
-		str.append(" [ ");
+		str += " [ ";
 		for (i=0; i<CHAR_COUNT; i++)
 		{
 			if (m_plugboard[i] > i)
 			{
-				str.append(1, (char)(i+'A'));
-				str.append(1, '-');
-				str.append(1, (char)(m_plugboard[i]+'A'));
-				str.append(1, ' ');
+				str += (char)(i+'A');
+				str += '-';
+				str += (char)(m_plugboard[i]+'A');
+				str += ' ';
 			}
 		}
-		str.append(1, ']');
+		str += ']';
 	}
 }
 
