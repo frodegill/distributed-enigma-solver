@@ -8,6 +8,7 @@
 #include "client.h"
 #include "keysetting.h"
 #include "plugboard.h"
+#include "ringsetting.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <cstdio>
@@ -176,7 +177,9 @@ bool ParseEncryptedText(NetworkInfo& network_info)
 
 	fprintf(stdout, "Encrypted text:\n");
 	fprintf(stdout, " \"%s\"\n", text.c_str());
-	g_encrypted_text = new uint8_t[text.length()];
+	g_encrypted_text_length = text.length();
+	g_encrypted_text = new uint8_t[g_encrypted_text_length];
+	g_precalc_plug_paths = new uint8_t[g_encrypted_text_length*CHAR_COUNT];
 	size_t i;
 	for (i=0; i<text.length(); i++)
 	{
@@ -214,42 +217,66 @@ bool ParseSetting(NetworkInfo& network_info)
 
 void Calculate()
 {
+	RingSetting ring_setting;
+	ring_setting.InitializePosition();
+
 	KeySetting key_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
 	KeySetting tmp_key_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
 
-	key_setting.InitializeStartPosition();
+	Plugboard plugboard;
+
+	size_t encrypted_char_index;
+	uint8_t precalc_index;
+	int8_t ch;
+	int8_t ring;
+	const uint8_t* ring_settings = ring_setting.GetSettings();
+	const uint8_t* tmp_key_settings;
+
 	do
 	{
-		tmp_key_setting = key_setting;
+		key_setting.InitializeStartPosition();
+		do
+		{
+			tmp_key_setting = key_setting;
+			tmp_key_settings = tmp_key_setting.GetSettings();
 
-	} while (key_setting.IncrementStartPosition());
+			for (encrypted_char_index=0; encrypted_char_index<g_encrypted_text_length; encrypted_char_index++)
+			{
+				tmp_key_setting.StepRotors();
+
+				//Precalc all paths for current encryptedCharIndex
+				for (precalc_index=0; precalc_index<CHAR_COUNT; precalc_index++)
+				{
+					ch = precalc_index;
+					for (ring=RIGHT; ring<=LEFT; ring--)
+					{
+						ch = g_ring_definitions[g_reflector_ring_settings->m_rings[ring]]
+						                       [OVERFLOW_BASE*CHAR_COUNT + ch - ring_settings[ring] + tmp_key_settings[ring]] - tmp_key_settings[ring] + ring_settings[ring];
+					}
+					
+					ch = g_reflector_definitions[g_reflector_ring_settings->m_reflector][OVERFLOW_BASE * CHAR_COUNT + ch];
+					
+					for (ring=LEFT; ring<=RIGHT; ring++)
+					{
+						ch = g_inverse_ring_definitions[g_reflector_ring_settings->m_rings[ring]]
+						                               [OVERFLOW_BASE*CHAR_COUNT + ch - ring_settings[ring] + tmp_key_settings[ring]] - tmp_key_settings[ring] + ring_settings[ring];
+					}
+
+					while (ch < 0) ch += CHAR_COUNT;
+					while (ch >= CHAR_COUNT) ch -= CHAR_COUNT;
+					g_precalc_plug_paths[encrypted_char_index*CHAR_COUNT + precalc_index] = ch;
+				}
+			}
+
+			//Initialize plugboard
+			plugboard.Initialize();
+
+
+
+		} while (key_setting.IncrementStartPosition());
+	} while (ring_setting.IncrementPosition());
 
 #if 0
-				for (encryptedCharIndex=0; encryptedCharIndex<encryptedText.length; encryptedCharIndex++) {
-
-						//Step rotor(s).
-						stepRings(ringTurnoverPositions, ring, tmpKeySetting);
-
-						//Precalc all paths for current encryptedCharIndex
-						for (precalcIndex = 0; precalcIndex < CHARCOUNT; precalcIndex++) {
-								ch = precalcIndex;
-								ch = ringDefinitions[ring[RIGHT]][OVERFLOWBASE * CHARCOUNT + ch - ringSetting[RIGHT] + tmpKeySetting[RIGHT]] - tmpKeySetting[RIGHT] + ringSetting[RIGHT];
-								ch = ringDefinitions[ring[MIDDLE]][OVERFLOWBASE * CHARCOUNT + ch - ringSetting[MIDDLE] + tmpKeySetting[MIDDLE]] - tmpKeySetting[MIDDLE] + ringSetting[MIDDLE];
-								ch = ringDefinitions[ring[LEFT]][OVERFLOWBASE * CHARCOUNT + ch - ringSetting[LEFT] + tmpKeySetting[LEFT]] - tmpKeySetting[LEFT] + ringSetting[LEFT];
-								ch = reflectorDefinitions[reflector][OVERFLOWBASE * CHARCOUNT + ch];
-								ch = inverseRingDefinitions[ring[LEFT]][OVERFLOWBASE * CHARCOUNT + ch - ringSetting[LEFT] + tmpKeySetting[LEFT]] - tmpKeySetting[LEFT] + ringSetting[LEFT];
-								ch = inverseRingDefinitions[ring[MIDDLE]][OVERFLOWBASE * CHARCOUNT + ch - ringSetting[MIDDLE] + tmpKeySetting[MIDDLE]] - tmpKeySetting[MIDDLE] + ringSetting[MIDDLE];
-								ch = inverseRingDefinitions[ring[RIGHT]][OVERFLOWBASE * CHARCOUNT + ch - ringSetting[RIGHT] + tmpKeySetting[RIGHT]] - tmpKeySetting[RIGHT] + ringSetting[RIGHT];
-								while (ch < 0) ch += CHARCOUNT;
-								while (ch >= CHARCOUNT) ch -= CHARCOUNT;
-								precalcPlugPaths[encryptedCharIndex*CHARCOUNT + precalcIndex] = ch;
-						}
-				}
-
-				//Initialize plugboard
-				for (i = 0; i < CHARCOUNT; i++) {
-						plugboard[i] = i;
-				}
 
 				tmpMaxIc = tmpMaxNgram = 0;
 				foundNewMaxNgram = true;
@@ -476,6 +503,7 @@ int main(int argc, char* argv[])
 	delete[] g_network_buffer;
 
 	delete g_reflector_ring_settings;
+	delete[] g_precalc_plug_paths;
 	delete[] g_encrypted_text;
 	return 0;
 }

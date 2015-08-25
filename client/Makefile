@@ -6,7 +6,7 @@ all:	$(CLIENT)
 
 # source files
 DEBUG_INFO = YES
-CLIENT_SOURCES = client.c keysetting.c plugboard.c common.c
+CLIENT_SOURCES = client.c keysetting.c ringsetting.c plugboard.c common.c
 CLIENT_OBJECTS = $(CLIENT_SOURCES:.c=.o)
 
 ######## compiler- and linker settings #########

@@ -21,6 +21,7 @@ public:
 	bool StepRotors();
 	void operator=(const KeySetting& src);
 	void ToString(std::string& str) const;
+	const uint8_t* GetSettings() const {return m_setting;}
 
 private:
 	static uint32_t ToInt(const uint8_t* setting_3bytes);
