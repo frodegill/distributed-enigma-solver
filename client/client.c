@@ -221,7 +221,42 @@ bool ParseSetting(NetworkInfo& network_info)
 	return (0 == network_info.m_remaining_bytes);
 }
 
-void Decrypt(Plugboard& plugboard, uint8_t* decrypted_text_buffer)
+void Decrypt(const uint8_t* ring_settings, KeySetting& key_setting, const Plugboard& plugboard, uint8_t* decrypted_text_buffer)
+{
+	const uint8_t* key_settings = key_setting.GetSettings();
+	const uint8_t* plugs = plugboard.GetPlugs();
+
+	int8_t ring;
+	int8_t ch;
+	size_t i;
+	for (i=0; i<g_encrypted_text_length; i++)
+	{
+		key_setting.StepRotors();
+
+		ch = plugs[g_encrypted_text[i]];
+
+		for (ring=RIGHT; ring<=LEFT; ring--)
+		{
+			ch = g_ring_definitions[g_reflector_ring_settings->m_rings[ring]]
+															[OVERFLOW_BASE*CHAR_COUNT + ch - ring_settings[ring] + key_settings[ring]] - key_settings[ring] + ring_settings[ring];
+		}
+		
+		ch = g_reflector_definitions[g_reflector_ring_settings->m_reflector][OVERFLOW_BASE * CHAR_COUNT + ch];
+		
+		for (ring=LEFT; ring<=RIGHT; ring++)
+		{
+			ch = g_inverse_ring_definitions[g_reflector_ring_settings->m_rings[ring]]
+																			[OVERFLOW_BASE*CHAR_COUNT + ch - ring_settings[ring] + key_settings[ring]] - key_settings[ring] + ring_settings[ring];
+		}
+
+		while (ch < 0) ch += CHAR_COUNT;
+		while (ch >= CHAR_COUNT) ch -= CHAR_COUNT;
+
+		decrypted_text_buffer[i] = plugs[ch];
+	}
+}
+
+void DecryptPrecalcPlugPaths(const Plugboard& plugboard, uint8_t* decrypted_text_buffer)
 {
 	const uint8_t* plugs = plugboard.GetPlugs();
 
@@ -278,7 +313,7 @@ bool OptimizeICScore(Plugboard& plugboard, uint8_t* decrypted_text_buffer, uint3
 	plugboard.Push();
 	do
 	{
-		Decrypt(plugboard, decrypted_text_buffer);
+		DecryptPrecalcPlugPaths(plugboard, decrypted_text_buffer);
 
 		local_ic_score = ICScore(decrypted_text_buffer);
 		if (ic_score < local_ic_score)
@@ -306,7 +341,7 @@ bool OptimizeNGramScore(Plugboard& plugboard, uint8_t* decrypted_text_buffer, ui
 	plugboard.Push();
 	do
 	{
-		Decrypt(plugboard, decrypted_text_buffer);
+		DecryptPrecalcPlugPaths(plugboard, decrypted_text_buffer);
 
 		local_ngram_score = NGramScore(decrypted_text_buffer);
 		if (ngram_score < local_ngram_score)
@@ -320,6 +355,42 @@ bool OptimizeNGramScore(Plugboard& plugboard, uint8_t* decrypted_text_buffer, ui
 	return improved;
 }
 
+void OptimizeRingSetting(KeySetting& ring_setting, KeySetting& key_setting, const Plugboard& plugboard,
+                         uint8_t* decrypted_text_buffer, uint32_t& ngram_score)
+{
+#define FAST_WHEEL_ONLY   (CHAR_COUNT)
+#define NORMAL_OPTIMIZE   ((CHAR_COUNT-1)*FAST_WHEEL_ONLY)
+#define COMPLETE_OPTIMIZE (CHAR_COUNT*NORMAL_OPTIMIZE)
+
+#define CURRENT_OPTIMIZE  (NORMAL_OPTIMIZE)
+
+	ring_setting.Push();
+	key_setting.Push();
+	uint32_t local_ngram_score = ngram_score;
+	KeySetting tmp_key_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
+
+	size_t step_offset;
+	for (step_offset=0; step_offset<CURRENT_OPTIMIZE; step_offset++)
+	{
+		tmp_key_setting = key_setting;
+		Decrypt(ring_setting.GetSettings(), tmp_key_setting, plugboard, decrypted_text_buffer);
+
+		local_ngram_score = NGramScore(decrypted_text_buffer);
+		if (local_ngram_score > ngram_score)
+		{
+			ring_setting.Push();
+			key_setting.Push();
+			ngram_score = local_ngram_score;
+		}
+
+		ring_setting.StepRotors();
+		key_setting.StepRotors();
+	}
+
+	ring_setting.Pop();
+	key_setting.Pop();
+}
+
 void Calculate()
 {
 	RingSetting ring_setting;
@@ -327,9 +398,14 @@ void Calculate()
 
 	KeySetting key_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
 	KeySetting tmp_key_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
-	KeySetting best_key_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
 
 	Plugboard plugboard;
+
+	KeySetting optimized_ring_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings); //Use KeySetting to get the turnover positions
+	KeySetting optimized_key_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
+
+	KeySetting best_ring_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
+	KeySetting best_key_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
 	Plugboard best_plugboard;
 
 	size_t encrypted_char_index;
@@ -341,6 +417,7 @@ void Calculate()
 
 	uint32_t local_ic_score, local_ngram_score;
 	uint32_t best_ic_score=0, best_ngram_score=0;
+	uint32_t best_optimized_ic_score=0, best_optimized_ngram_score=0;
 	do
 	{
 		key_setting.InitializeStartPosition();
@@ -394,93 +471,23 @@ void Calculate()
 			{
 				best_ic_score = local_ic_score;
 				best_ngram_score = local_ngram_score;
-				best_key_setting = key_setting;
-				best_plugboard = plugboard;
+
+				optimized_ring_setting.CopySettings(ring_settings);
+				optimized_key_setting = key_setting;
+				OptimizeRingSetting(optimized_ring_setting, optimized_key_setting, plugboard,
+				                    g_decrypt_buffer, local_ngram_score);
+				if (local_ngram_score>best_optimized_ngram_score || (local_ngram_score==best_optimized_ngram_score && local_ic_score>best_optimized_ic_score))
+				{
+					best_ic_score = local_ic_score;
+					best_ngram_score = local_ngram_score;
+					best_ring_setting = optimized_ring_setting;
+					best_key_setting = optimized_key_setting;
+					best_plugboard = plugboard;
+				}
 			}
 
 		} while (key_setting.IncrementStartPosition());
 	} while (ring_setting.IncrementPosition());
-
-#if 0
-
-				tmpMaxIc = tmpMaxNgram = 0;
-				foundNewMaxNgram = true;
-				ngramClimbGPU.put(precalcPlugPaths);
-				//Hill-climb
-				while (foundNewMaxNgram) {
-
-						//N-gram climb
-						if (USE_GPU) {
-								ngramClimbGPU.put(hillclimbResult);
-								ngramClimbGPU.put(plugboard);
-
-								ngramClimbGPU.execute(range);
-								ngramClimbGPU.get(hillclimbResult);
-						} else {
-								for (gid = 0; gid < CHARCOUNT * CHARCOUNT; gid++) {
-										ngramClimbCPU(gid, bigrams, trigrams, quadgrams, plugboard, hillclimbResult, hillclimbDecodeBuffer, encryptedText, precalcPlugPaths);
-								}
-						}
-						foundNewMaxNgram = false;
-						for (gid=0; gid<CHARCOUNT*CHARCOUNT; gid++) {
-								if (hillclimbResult[gid] > tmpMaxNgram) {
-										tmpMaxNgram = hillclimbResult[gid];
-										maxNgramIndex = gid;
-										foundNewMaxNgram = true;
-								}
-						}
-						if (foundNewMaxNgram) {
-								int c1 = maxNgramIndex/CHARCOUNT;
-								int c2 = maxNgramIndex-(c1*CHARCOUNT);
-								int tmpCh = plugboard[c1];
-								plugboard[c1] = plugboard[c2];
-								plugboard[c2] = tmpCh;
-
-								if (tmpMaxNgram > maxNgram) {
-										maxNgram = tmpMaxNgram;
-										tmpMaxOptimizedNgram = optimizeRingSetting(encryptedText, maxOptimizedNgram,
-														bigrams, trigrams, quadgrams,
-														reflectorDefinitions, ringDefinitions, inverseRingDefinitions, ringTurnoverPositions,
-														reflector, ring, ringSetting, keySetting, plugboard);
-										if (tmpMaxOptimizedNgram > maxOptimizedNgram) {
-												maxOptimizedNgram = tmpMaxOptimizedNgram;
-										}
-								}
-						}
-
-						if (false && !foundNewMaxNgram) {
-								if (USE_GPU) {
-//                                                            icClimbGPU(gid, icScores, plugboard, hillclimbResult, hillclimbScoreBuffer, encryptedText, precalcPlugPaths);
-								} else {
-										for (gid = 0; gid < CHARCOUNT * CHARCOUNT; gid++) {
-												icClimbCPU(gid, icScores, plugboard, hillclimbResult, hillclimbScoreBuffer, encryptedText, precalcPlugPaths);
-										}
-								}
-								foundNewMaxIc = false;
-								for (gid=0; gid<CHARCOUNT*CHARCOUNT; gid++) {
-										if (hillclimbResult[gid] > tmpMaxIc) {
-												tmpMaxIc = hillclimbResult[gid];
-												maxIcIndex = gid;
-												foundNewMaxIc = true;
-										}
-								}
-								if (foundNewMaxIc) {
-										int c1 = maxIcIndex/CHARCOUNT;
-										int c2 = maxIcIndex-(c1*CHARCOUNT);
-										int tmpCh = plugboard[c1];
-										plugboard[c1] = plugboard[c2];
-										plugboard[c2] = tmpCh;
-
-										if (tmpMaxIc > maxIc) {
-												maxIc = tmpMaxIc;
-												lastLogTime = System.currentTimeMillis();
-												debugProgress(reflector, ring, ringSetting, keySetting, plugboard);
-												debugOutput("icScore:" + tmpMaxIc, encryptedText, precalcPlugPaths, plugboard);
-										}
-								}
-						}
-				}
-#endif
 }
 
 void MainLoop(int& socket_fd)

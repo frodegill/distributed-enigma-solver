@@ -23,6 +23,16 @@ void KeySetting::InitializeStartPosition()
 	}
 }
 
+void KeySetting::InitializeStartPosition(const RingSetting& ring_setting)
+{
+	const uint8_t* settings = ring_setting.GetSettings();
+	uint8_t i;
+	for (i=0; i<ROTOR_COUNT; i++)
+	{
+		m_start_setting[i] = settings[i];
+	}
+}
+
 bool KeySetting::IncrementStartPosition()
 {
 	if (CHAR_COUNT == ++m_start_setting[RIGHT])
@@ -33,6 +43,7 @@ bool KeySetting::IncrementStartPosition()
 			m_start_setting[MIDDLE] = 0;
 			if (CHAR_COUNT == ++m_start_setting[LEFT])
 			{
+				m_start_setting[LEFT] = 0;
 				return false;
 			}
 		}
@@ -77,6 +88,33 @@ void KeySetting::operator=(const KeySetting& src)
 	{
 		m_start_setting[i] = src.m_start_setting[i];
 		m_setting[i] = src.m_setting[i];
+	}
+}
+
+void KeySetting::Push()
+{
+	uint8_t i;
+	for (i=0; i<ROTOR_COUNT; i++)
+	{
+		m_setting_backup[i] = m_setting[i];
+	}
+}
+
+void KeySetting::Pop()
+{
+	uint8_t i;
+	for (i=0; i<ROTOR_COUNT; i++)
+	{
+		m_setting[i] = m_setting_backup[i];
+	}
+}
+
+void KeySetting::CopySettings(const uint8_t* settings)
+{
+	uint8_t i;
+	for (i=0; i<ROTOR_COUNT; i++)
+	{
+		m_setting[i] = settings[i];
 	}
 }
 
