@@ -27,6 +27,7 @@ public:
 	const uint8_t* GetSettings() const {return m_setting;}
 	void CopySettings(const uint8_t* settings);
 	void ToString(std::string& str) const;
+	uint32_t ToInt(const KeySetting& ring_setting); //Join ring and key setting into one uint32
 
 private:
 	static uint32_t ToInt(const uint8_t* setting_3bytes);

@@ -391,7 +391,7 @@ void OptimizeRingSetting(KeySetting& ring_setting, KeySetting& key_setting, cons
 	key_setting.Pop();
 }
 
-void Calculate()
+void Calculate(KeySetting& best_ring_setting, KeySetting& best_key_setting, Plugboard& best_plugboard, uint32_t& best_optimized_ngram_score)
 {
 	RingSetting ring_setting;
 	ring_setting.InitializePosition();
@@ -404,10 +404,6 @@ void Calculate()
 	KeySetting optimized_ring_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings); //Use KeySetting to get the turnover positions
 	KeySetting optimized_key_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
 
-	KeySetting best_ring_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
-	KeySetting best_key_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
-	Plugboard best_plugboard;
-
 	size_t encrypted_char_index;
 	uint8_t precalc_index;
 	int8_t ch;
@@ -417,7 +413,7 @@ void Calculate()
 
 	uint32_t local_ic_score, local_ngram_score;
 	uint32_t best_ic_score=0, best_ngram_score=0;
-	uint32_t best_optimized_ic_score=0, best_optimized_ngram_score=0;
+	uint32_t best_optimized_ic_score=0;
 	do
 	{
 		key_setting.InitializeStartPosition();
@@ -549,7 +545,12 @@ void MainLoop(int& socket_fd)
 			socket_fd = -1;
 
 			//Calculate
-			Calculate();
+			KeySetting best_ring_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
+			KeySetting best_key_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
+			Plugboard best_plugboard;
+			uint32_t best_optimized_ngram_score = 0;
+			Calculate(best_ring_setting, best_key_setting, best_plugboard, best_optimized_ngram_score);
+			Decrypt(best_ring_setting.GetSettings(), best_key_setting, best_plugboard, g_decrypt_buffer);
 
 			//Create socket, send result, loop and read next packet info
 			socket_fd = CreateSocket(g_hostname, g_port);
@@ -560,20 +561,27 @@ void MainLoop(int& socket_fd)
 			}
 			fprintf(stderr, "Created socket %d\n", socket_fd);
 
-			int score = 0;
-			int ring_key_setting = 0;
-			std::string plugboard="ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-			std::string plaintext="TODO";
-			sprintf(network_info.buf(), "DONE %d %d %d %s ", g_reflector_ring_settings->ToInt(), score, ring_key_setting, plugboard.c_str());
+			std::string plugboard;
+			best_plugboard.ToString(plugboard, false);
+			
+			std::string decrypted_text_str;
+			size_t i;
+			for (i=0; i<g_encrypted_text_length; i++)
+			{
+				decrypted_text_str += (char)(g_decrypt_buffer[i]+'A');
+			}
+
+			sprintf(network_info.buf(), "DONE %d %d %d %s ", g_reflector_ring_settings->ToInt(),
+							best_optimized_ngram_score, best_key_setting.ToInt(best_ring_setting), plugboard.c_str());
 			network_info.m_available_bytes = strlen(network_info.const_buf());
-			network_info.m_remaining_bytes = network_info.m_available_bytes+plaintext.length();
+			network_info.m_remaining_bytes = network_info.m_available_bytes+decrypted_text_str.length();
 			if (!StartSendBuffer(network_info))
 			{
 				return;
 			}
 
-			network_info.SetBuffer(plaintext.c_str(), plaintext.length());
-			network_info.m_available_bytes = plaintext.length();
+			network_info.SetBuffer(decrypted_text_str.c_str(), decrypted_text_str.length());
+			network_info.m_available_bytes = decrypted_text_str.length();
 			if (!ContinueSendBuffer(network_info) || 0!=network_info.m_remaining_bytes)
 			{
 				return;

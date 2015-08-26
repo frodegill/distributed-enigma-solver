@@ -319,7 +319,7 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 		int reflector_and_rings_settings;
 		if (!ParseInt(network_info, reflector_and_rings_settings))
 		{
-			fprintf(stdout, "Error parsing new highscore1\n");
+			fprintf(stdout, "Error parsing packet number\n");
 			return;
 		}
 		fprintf(stdout, "Got reflector_ring_setting %d\n", reflector_and_rings_settings);
@@ -328,7 +328,7 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 		int client_score;
 		if (!ParseInt(network_info, client_score))
 		{
-			fprintf(stdout, "Error parsing new highscore2\n");
+			fprintf(stdout, "Error parsing score\n");
 			return;
 		}
 		fprintf(stdout, "Got score %d\n", client_score);
@@ -339,7 +339,7 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 			    !ParseString(network_info, g_max_plugboard) ||
 			    !ParseString(network_info, g_max_plaintext))
 			{
-				fprintf(stdout, "Error parsing new highscore3\n");
+				fprintf(stdout, "Error parsing new highscore\n");
 			}
 			else
 			{

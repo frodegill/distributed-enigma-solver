@@ -128,6 +128,16 @@ void KeySetting::ToString(std::string& str) const
 	}
 }
 
+uint32_t KeySetting::ToInt(const KeySetting& ring_setting)
+{
+	return ring_setting.m_setting[LEFT]*CHAR_COUNT*CHAR_COUNT*CHAR_COUNT*CHAR_COUNT*CHAR_COUNT +
+	       ring_setting.m_setting[MIDDLE]*CHAR_COUNT*CHAR_COUNT*CHAR_COUNT*CHAR_COUNT +
+	       ring_setting.m_setting[RIGHT]*CHAR_COUNT*CHAR_COUNT*CHAR_COUNT +
+	       m_setting[LEFT]*CHAR_COUNT*CHAR_COUNT +
+	       m_setting[MIDDLE]*CHAR_COUNT +
+	       m_setting[RIGHT];
+}
+
 uint32_t KeySetting::ToInt(const uint8_t* setting_3bytes)
 {
 	return setting_3bytes[LEFT]<<16|setting_3bytes[MIDDLE]<<8|setting_3bytes[RIGHT];
