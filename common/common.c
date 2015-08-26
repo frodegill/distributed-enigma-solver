@@ -27,6 +27,17 @@ int PacketInfo::ToInt() const {
 	       m_rings[RIGHT];
 }
 
+void PacketInfo::ToString(std::string& str) const
+{
+	str.clear();
+	str += (char)(m_reflector+'B');
+	uint8_t i;
+	for (i=0; i<ROTOR_COUNT; i++)
+	{
+		str += (char)(m_rings[i]+'1');
+	}
+}
+
 void PacketInfo::Increment()
 {
 	m_packet_number++;

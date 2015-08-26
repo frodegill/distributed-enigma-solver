@@ -73,28 +73,31 @@ bool Plugboard::SwapNext()
 	}
 	else
 	{
-		if (!(m_plugboard[m_swapchar[0]]==m_swapchar[1] && m_plugboard[m_swapchar[1]]==m_swapchar[0]))
+		if (!(m_swapchar[0]==0 && m_swapchar[1]==0)) //After Reset(), both are 0
 		{
-			if (m_plugboard[m_swapchar[0]] != m_swapchar[0])
-				m_swap_bflag|=REVERT_P1;
-
-			if (m_plugboard[m_swapchar[1]] != m_swapchar[1])
-				m_swap_bflag|=REVERT_P2;
-
-			if ((REVERT_P1|REVERT_P2)==(m_swap_bflag&(REVERT_P1|REVERT_P2)))
-				m_swap_bflag|=REVERT_P1_AND_P2;
-
-			if(m_swap_bflag&(REVERT_P1|REVERT_P1_AND_P2))
-				Swap(m_swapchar[0], m_plugboard[m_swapchar[0]], true);
-
-			if(m_swap_bflag&(REVERT_P2|REVERT_P1_AND_P2))
-				Swap(m_swapchar[1], m_plugboard[m_swapchar[1]], true);
-
-			Swap(m_swapchar[0], m_swapchar[1], true);
-
-			if (0 != (m_swap_bflag&(REVERT_P1|REVERT_P2|REVERT_P1_AND_P2)))
+			if (!(m_plugboard[m_swapchar[0]]==m_swapchar[1] && m_plugboard[m_swapchar[1]]==m_swapchar[0]))
 			{
-				return MORE;
+				if (m_plugboard[m_swapchar[0]] != m_swapchar[0])
+					m_swap_bflag|=REVERT_P1;
+
+				if (m_plugboard[m_swapchar[1]] != m_swapchar[1])
+					m_swap_bflag|=REVERT_P2;
+
+				if ((REVERT_P1|REVERT_P2)==(m_swap_bflag&(REVERT_P1|REVERT_P2)))
+					m_swap_bflag|=REVERT_P1_AND_P2;
+
+				if(m_swap_bflag&(REVERT_P1|REVERT_P1_AND_P2))
+					Swap(m_swapchar[0], m_plugboard[m_swapchar[0]], true);
+
+				if(m_swap_bflag&(REVERT_P2|REVERT_P1_AND_P2))
+					Swap(m_swapchar[1], m_plugboard[m_swapchar[1]], true);
+
+				Swap(m_swapchar[0], m_swapchar[1], true);
+
+				if (0 != (m_swap_bflag&(REVERT_P1|REVERT_P2|REVERT_P1_AND_P2)))
+				{
+					return MORE;
+				}
 			}
 		}
 

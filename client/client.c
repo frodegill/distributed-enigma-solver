@@ -221,6 +221,16 @@ bool ParseSetting(NetworkInfo& network_info)
 	return (0 == network_info.m_remaining_bytes);
 }
 
+void DecryptedString(std::string& decrypted_text_str)
+{
+	decrypted_text_str.clear();
+	size_t i;
+	for (i=0; i<g_encrypted_text_length; i++)
+	{
+		decrypted_text_str += (char)(g_decrypt_buffer[i]+'A');
+	}
+}
+
 void Decrypt(const uint8_t* ring_settings, KeySetting& key_setting, const Plugboard& plugboard, uint8_t* decrypted_text_buffer)
 {
 	const uint8_t* key_settings = key_setting.GetSettings();
@@ -487,7 +497,31 @@ void Calculate(KeySetting& best_ring_setting, KeySetting& best_key_setting, Plug
 					best_ring_setting = optimized_ring_setting;
 					best_key_setting = optimized_key_setting;
 					best_plugboard = plugboard;
+
+					//Debug hiscore output
+					std::string reflector_ring_str, ring_setting_str, key_setting_str, optimized_ring_setting_str, optimized_key_setting_str;
+					g_reflector_ring_settings->ToString(reflector_ring_str);
+					ring_setting.ToString(ring_setting_str);
+					key_setting.ToString(key_setting_str);
+					optimized_ring_setting.ToString(optimized_ring_setting_str);
+					optimized_key_setting.ToString(optimized_key_setting_str);
+					std::string plug_str;
+					plugboard.ToString(plug_str, true);
+					std::string decrypted_text_str;
+					DecryptedString(decrypted_text_str);
+					fprintf(stdout, "%s-%s-%s %s-%s score %d using %s : %s\n",
+									reflector_ring_str.c_str(), ring_setting_str.c_str(), key_setting_str.c_str(), optimized_ring_setting_str.c_str(), optimized_key_setting_str.c_str(),
+									best_ngram_score, plug_str.c_str(), decrypted_text_str.c_str());
 				}
+			}
+
+			//Debug progress output
+			if (0==(key_setting.ToInt()%100))
+			{
+				std::string reflector_ring_str, key_setting_str;
+				g_reflector_ring_settings->ToString(reflector_ring_str);
+				key_setting.ToString(key_setting_str);
+				fprintf(stdout, "%s %s\n", reflector_ring_str.c_str(), key_setting_str.c_str());
 			}
 
 		} while (key_setting.IncrementStartPosition());
@@ -573,11 +607,7 @@ void MainLoop(int& socket_fd)
 			best_plugboard.ToString(plugboard, false);
 			
 			std::string decrypted_text_str;
-			size_t i;
-			for (i=0; i<g_encrypted_text_length; i++)
-			{
-				decrypted_text_str += (char)(g_decrypt_buffer[i]+'A');
-			}
+			DecryptedString(decrypted_text_str);
 
 			sprintf(network_info.buf(), "DONE %d %d %d %s ", g_reflector_ring_settings->ToInt(),
 							best_optimized_ngram_score, best_key_setting.ToInt(best_ring_setting), plugboard.c_str());

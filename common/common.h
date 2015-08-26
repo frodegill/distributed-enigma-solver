@@ -77,6 +77,7 @@ struct PacketInfo
 
 	void FromInt(int packet_number);
 	int ToInt() const;
+	void ToString(std::string& str) const;
 	void Increment();
 };
 

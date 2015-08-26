@@ -48,6 +48,11 @@ bool KeySetting::IncrementStartPosition()
 			}
 		}
 	}
+	uint8_t i;
+	for (i=0; i<ROTOR_COUNT; i++)
+	{
+		m_setting[i] = m_start_setting[i];
+	}
 	return true;
 }
 
@@ -126,6 +131,13 @@ void KeySetting::ToString(std::string& str) const
 	{
 		str += (char)(m_setting[i]+'A');
 	}
+}
+
+uint32_t KeySetting::ToInt()
+{
+	return m_setting[LEFT]*CHAR_COUNT*CHAR_COUNT +
+	       m_setting[MIDDLE]*CHAR_COUNT +
+	       m_setting[RIGHT];
 }
 
 uint32_t KeySetting::ToInt(const KeySetting& ring_setting)
