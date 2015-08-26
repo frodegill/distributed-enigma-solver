@@ -33,6 +33,7 @@ int g_quadgrams[CHAR_COUNT][CHAR_COUNT][CHAR_COUNT][CHAR_COUNT];
 
 uint8_t* g_encrypted_text = NULL;
 size_t g_encrypted_text_length = 0;
+uint8_t* g_decrypt_buffer = NULL;
 uint8_t* g_precalc_plug_paths = NULL;
 PacketInfo* g_reflector_ring_settings = NULL;
 
@@ -40,5 +41,8 @@ uint8_t g_reflector_definitions[REFLECTOR_COUNT][OVERFLOW_PROTECTION*CHAR_COUNT]
 uint8_t g_ring_definitions[RING_COUNT][OVERFLOW_PROTECTION*CHAR_COUNT];
 uint8_t g_inverse_ring_definitions[RING_COUNT][OVERFLOW_PROTECTION*CHAR_COUNT];
 uint32_t g_ring_turnover_positions[RING_COUNT];
+
+uint32_t g_ic_charcount[CHAR_COUNT];
+uint32_t* g_ic_score;
 
 #endif // _CLIENT_H_

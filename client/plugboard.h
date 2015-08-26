@@ -37,6 +37,8 @@ public:
 
 	bool Swap(int8_t c1, int8_t c2, bool add_to_history_stack);
 
+	const uint8_t* GetPlugs() const {return m_plugboard;}
+
 private:
 	inline bool SkipRedundantPlugSettings();
 	inline bool IncrementAndSkipRedundantPlugSettings();
