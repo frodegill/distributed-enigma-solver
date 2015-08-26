@@ -235,7 +235,7 @@ void Decrypt(const uint8_t* ring_settings, KeySetting& key_setting, const Plugbo
 
 		ch = plugs[g_encrypted_text[i]];
 
-		for (ring=RIGHT; ring<=LEFT; ring--)
+		for (ring=RIGHT; ring>=LEFT; ring--)
 		{
 			ch = g_ring_definitions[g_reflector_ring_settings->m_rings[ring]]
 															[OVERFLOW_BASE*CHAR_COUNT + ch - ring_settings[ring] + key_settings[ring]] - key_settings[ring] + ring_settings[ring];
@@ -318,14 +318,22 @@ bool OptimizeICScore(Plugboard& plugboard, uint8_t* decrypted_text_buffer, uint3
 		local_ic_score = ICScore(decrypted_text_buffer);
 		if (ic_score < local_ic_score)
 		{
-			if (ignore_ngram_score || ngram_score<(local_ngram_score=NGramScore(decrypted_text_buffer)))
+			if (ignore_ngram_score)
 			{
 				ic_score = local_ic_score;
-				if (ngram_score<local_ngram_score)
-					ngram_score = local_ngram_score;
-				
 				improved = true;
 				plugboard.Push();
+			}
+			else
+			{
+				local_ngram_score = NGramScore(decrypted_text_buffer);
+				if (ngram_score < local_ngram_score)
+				{
+					ic_score = local_ic_score;
+					ngram_score = local_ngram_score;
+					improved = true;
+					plugboard.Push();
+				}
 			}
 		}
 	} while (plugboard.SwapNext());
@@ -430,7 +438,7 @@ void Calculate(KeySetting& best_ring_setting, KeySetting& best_key_setting, Plug
 				for (precalc_index=0; precalc_index<CHAR_COUNT; precalc_index++)
 				{
 					ch = precalc_index;
-					for (ring=RIGHT; ring<=LEFT; ring--)
+					for (ring=RIGHT; ring>=LEFT; ring--)
 					{
 						ch = g_ring_definitions[g_reflector_ring_settings->m_rings[ring]]
 						                       [OVERFLOW_BASE*CHAR_COUNT + ch - ring_settings[ring] + tmp_key_settings[ring]] - tmp_key_settings[ring] + ring_settings[ring];
