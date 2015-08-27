@@ -429,15 +429,6 @@ void Calculate(KeySetting& best_ring_setting, KeySetting& best_key_setting, Plug
 	do
 	{
 		key_setting.InitializeStartPosition();
-#ifdef DEBUG
-		RingSetting dummy;
-		dummy.InitializePosition();
-		uint8_t* dummy_settings_writable = const_cast<uint8_t*>(dummy.GetSettings());
-		dummy_settings_writable[LEFT] = 'Z'-'A';
-		dummy_settings_writable[MIDDLE] = 'Z'-'A';
-		dummy_settings_writable[RIGHT] = 'A'-'A';
-		key_setting.InitializeStartPosition(dummy);
-#endif
 		do
 		{
 			tmp_key_setting = key_setting;

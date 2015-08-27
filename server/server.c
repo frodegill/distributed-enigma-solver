@@ -38,6 +38,45 @@ struct PendingPacketInfo
 std::list<PendingPacketInfo> g_pending_packets;
 
 
+void PrintUsage()
+{
+	fprintf(stdout, "\nParameters: <path to wordlist> <path to encrypted text> [TCP/IP listening port] (default port: 2720)\n\n"
+									"Example: ./enigma-solver-server files/english_words.txt files/encrypted.txt\n\n");
+}
+
+void PrintResult()
+{
+	std::string reflector_and_rings;
+	PacketInfo max_packet;
+	max_packet.FromInt(g_max_reflector_and_ring_settings);
+	max_packet.ToString(reflector_and_rings);
+
+	std::string ring_settings, key_settings;
+	uint32_t value = g_max_ring_key_settings;
+	uint32_t modulo = CHAR_COUNT*CHAR_COUNT*CHAR_COUNT*CHAR_COUNT*CHAR_COUNT;
+	uint32_t c;
+	uint8_t i;
+	for (i=0; i<(2*ROTOR_COUNT); i++)
+	{
+		c = value/modulo;
+		value -= c*modulo;
+		modulo /= CHAR_COUNT;
+		if (i<ROTOR_COUNT)
+		{
+			ring_settings += (char)(c+'A');
+		}
+		else
+		{
+			key_settings += (char)(c+'A');
+		}
+	}
+
+	fprintf(stdout, "Best score: %d, %s-%s-%s %s %s\n",
+					g_max_score,
+					reflector_and_rings.c_str(), ring_settings.c_str(), key_settings.c_str(),
+					g_max_plugboard.c_str(), g_max_plaintext.c_str());
+}
+
 bool ReadWordlist(const char* wordlist_filename)
 {
 	if (!wordlist_filename)
@@ -352,6 +391,7 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 		if (g_max_score < client_score)
 		{
 			g_max_score = client_score;
+			g_max_reflector_and_ring_settings = reflector_and_rings_settings;
 			if (!ParseInt(network_info, g_max_ring_key_settings) ||
 			    !ParseString(network_info, g_max_plugboard) ||
 			    !ParseString(network_info, g_max_plaintext))
@@ -360,7 +400,7 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 			}
 			else
 			{
-				fprintf(stdout, "New high: %d %d %s %s\n", g_max_score, g_max_ring_key_settings, g_max_plugboard.c_str(), g_max_plaintext.c_str());
+				PrintResult();
 			}
 		}
 
@@ -402,23 +442,7 @@ void MainLoop(int socket_fd)
 #ifdef DEBUG
 		fprintf(stderr, "Closed socket %d\n", network_info.m_socket_fd);
 #endif
-
-#ifdef DEBUG
-		break;
-#endif
 	}
-}
-
-void PrintUsage()
-{
-	fprintf(stdout, "\nParameters: <path to wordlist> <path to encrypted text> [TCP/IP listening port] (default port: 2720)\n\n"
-									"Example: ./enigma-solver-server files/english_words.txt files/encrypted.txt\n\n");
-}
-
-void PrintResult()
-{
-	fprintf(stdout, "\nParameters: <path to wordlist> <path to encrypted text> [TCP/IP listening port] (default port: 2720)\n\n"
-									"Example: ./enigma-solver-server files/english_words.txt files/encrypted.txt\n\n");
 }
 
 int main(int argc, char* argv[])
