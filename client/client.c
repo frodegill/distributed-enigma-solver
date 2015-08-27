@@ -21,9 +21,9 @@ void InitializeEnigma()
 	int overflow, reflector, ring, ch;
 
 	//Initialize reflectors
-	char reflector_defs[][CHAR_COUNT+1] = {{"EJMZALYXVBWFCRQUONTSPIKHGD"},  // A
-	                                       {"YRUHQSLDPXNGOKMIEBFZCWVJAT"},  // B
-	                                       {"FVPJIAOYEDRZXWGCTKUQSBNMHL"}}; // C
+	char reflector_defs[REFLECTOR_COUNT][CHAR_COUNT+1] = {//{"EJMZALYXVBWFCRQUONTSPIKHGD"},  // A
+	                                                      {"YRUHQSLDPXNGOKMIEBFZCWVJAT"},  // B
+	                                                      {"FVPJIAOYEDRZXWGCTKUQSBNMHL"}}; // C
 	for (reflector=0; reflector<REFLECTOR_COUNT; reflector++) {
 		for (overflow=0; overflow<OVERFLOW_PROTECTION; overflow++) {
 			for (ch=0; ch<CHAR_COUNT; ch++) {
@@ -33,14 +33,14 @@ void InitializeEnigma()
 	}
 
 	//Initialize ring definitions
-	char ring_defs[][CHAR_COUNT+1] = {{"EKMFLGDQVZNTOWYHXUSPAIBRCJ"},  // I
-	                                  {"AJDKSIRUXBLHWTMCQGZNPYFVOE"},  // II
-	                                  {"BDFHJLCPRTXVZNYEIWGAKMUSQO"},  // III
-	                                  {"ESOVPZJAYQUIRHXLNFTGKDCMWB"},  // IV
-	                                  {"VZBRGITYUPSDNHLXAWMJQOFECK"},  // V
-	                                  {"JPGVOUMFYQBENHZRDKASXLICTW"},  // VI
-	                                  {"NZJHGRCXMYSWBOUFAIVLPEKQDT"},  // VII
-	                                  {"FKQHTLXOCBJSPDZRAMEWNIUYGV"}}; // VIII
+	char ring_defs[RING_COUNT][CHAR_COUNT+1] = {{"EKMFLGDQVZNTOWYHXUSPAIBRCJ"},  // I
+	                                            {"AJDKSIRUXBLHWTMCQGZNPYFVOE"},  // II
+	                                            {"BDFHJLCPRTXVZNYEIWGAKMUSQO"},  // III
+	                                            {"ESOVPZJAYQUIRHXLNFTGKDCMWB"},  // IV
+	                                            {"VZBRGITYUPSDNHLXAWMJQOFECK"},  // V
+	                                            {"JPGVOUMFYQBENHZRDKASXLICTW"},  // VI
+	                                            {"NZJHGRCXMYSWBOUFAIVLPEKQDT"},  // VII
+	                                            {"FKQHTLXOCBJSPDZRAMEWNIUYGV"}}; // VIII
 	for (ring=0; ring<RING_COUNT; ring++) {
 		for (overflow=0; overflow<OVERFLOW_PROTECTION; overflow++) {
 			for (ch=0; ch<CHAR_COUNT; ch++) {
@@ -376,12 +376,6 @@ bool OptimizeNGramScore(Plugboard& plugboard, uint8_t* decrypted_text_buffer, ui
 void OptimizeRingSetting(KeySetting& ring_setting, KeySetting& key_setting, const Plugboard& plugboard,
                          uint8_t* decrypted_text_buffer, uint32_t& ngram_score)
 {
-#define FAST_WHEEL_ONLY   (CHAR_COUNT)
-#define NORMAL_OPTIMIZE   ((CHAR_COUNT-1)*FAST_WHEEL_ONLY)
-#define COMPLETE_OPTIMIZE (CHAR_COUNT*NORMAL_OPTIMIZE)
-
-#define CURRENT_OPTIMIZE  (NORMAL_OPTIMIZE)
-
 	ring_setting.Push();
 	key_setting.Push();
 	uint32_t local_ngram_score = ngram_score;
@@ -508,6 +502,7 @@ void Calculate(KeySetting& best_ring_setting, KeySetting& best_key_setting, Plug
 					std::string plug_str;
 					plugboard.ToString(plug_str, true);
 					std::string decrypted_text_str;
+					Decrypt(optimized_ring_setting.GetSettings(), optimized_key_setting, plugboard, g_decrypt_buffer);
 					DecryptedString(decrypted_text_str);
 					fprintf(stdout, "%s-%s-%s %s-%s score %d using %s : %s\n",
 									reflector_ring_str.c_str(), ring_setting_str.c_str(), key_setting_str.c_str(), optimized_ring_setting_str.c_str(), optimized_key_setting_str.c_str(),
@@ -516,12 +511,13 @@ void Calculate(KeySetting& best_ring_setting, KeySetting& best_key_setting, Plug
 			}
 
 			//Debug progress output
-			if (0==(key_setting.ToInt()%100))
+			if (0==(key_setting.ToInt()&0xFF))
 			{
-				std::string reflector_ring_str, key_setting_str;
+				std::string reflector_ring_str, ring_setting_str, key_setting_str;
 				g_reflector_ring_settings->ToString(reflector_ring_str);
+				ring_setting.ToString(ring_setting_str);
 				key_setting.ToString(key_setting_str);
-				fprintf(stdout, "%s %s\n", reflector_ring_str.c_str(), key_setting_str.c_str());
+				fprintf(stdout, "%s-%s-%s\n", reflector_ring_str.c_str(), ring_setting_str.c_str(), key_setting_str.c_str());
 			}
 
 		} while (key_setting.IncrementStartPosition());

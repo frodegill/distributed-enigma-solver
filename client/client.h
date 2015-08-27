@@ -9,12 +9,13 @@
  */
 
 #include "common.h"
-//#include "plugboard.h"
-//#include <arpa/inet.h>
-//#include <netinet/in.h>
-//#include <cstdio>
-//#include <cstring>
-//#include <unistd.h>
+
+#define FAST_WHEEL_ONLY   (CHAR_COUNT)
+#define NORMAL_OPTIMIZE   ((CHAR_COUNT-1)*FAST_WHEEL_ONLY)
+#define COMPLETE_OPTIMIZE (CHAR_COUNT*NORMAL_OPTIMIZE)
+///////////////////////////////////////////
+#define CURRENT_OPTIMIZE  (NORMAL_OPTIMIZE)
+
 
 #define OVERFLOW_PROTECTION (5) //From n-1-1 to n+1+1, to avoid range checking when adjusting for ring- and key-setting
 #define OVERFLOW_BASE (2) //Pointer to start of middle block
