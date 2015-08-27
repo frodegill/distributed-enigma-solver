@@ -53,7 +53,7 @@ void PacketInfo::Increment()
 				m_rings[MIDDLE] = 0;
 				if (RING_COUNT <= ++m_rings[LEFT])
 				{
-					m_rings[MIDDLE] = 0;
+					m_rings[LEFT] = 0;
 					m_reflector++;
 				}
 			}
