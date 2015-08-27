@@ -588,7 +588,6 @@ void MainLoop(int& socket_fd)
 			Plugboard best_plugboard;
 			uint32_t best_optimized_ngram_score = 0;
 			Calculate(best_ring_setting, best_key_setting, best_plugboard, best_optimized_ngram_score);
-			Decrypt(best_ring_setting.GetSettings(), best_key_setting, best_plugboard, g_decrypt_buffer);
 
 			//Create socket, send result, loop and read next packet info
 			socket_fd = CreateSocket(g_hostname, g_port);
@@ -599,14 +598,15 @@ void MainLoop(int& socket_fd)
 			}
 			fprintf(stderr, "Created socket %d\n", socket_fd);
 
-			std::string plugboard;
-			best_plugboard.ToString(plugboard, false);
+			std::string plugboard_str;
+			best_plugboard.ToString(plugboard_str, false);
 			
 			std::string decrypted_text_str;
+			Decrypt(best_ring_setting.GetSettings(), best_key_setting, best_plugboard, g_decrypt_buffer);
 			DecryptedString(decrypted_text_str);
 
 			sprintf(network_info.buf(), "DONE %d %d %d %s ", g_reflector_ring_settings->ToInt(),
-							best_optimized_ngram_score, best_key_setting.ToInt(best_ring_setting), plugboard.c_str());
+							best_optimized_ngram_score, best_key_setting.ToInt(best_ring_setting), plugboard_str.c_str());
 			network_info.m_available_bytes = strlen(network_info.const_buf());
 			network_info.m_remaining_bytes = network_info.m_available_bytes+decrypted_text_str.length();
 			if (!StartSendBuffer(network_info))
