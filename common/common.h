@@ -34,7 +34,7 @@
 
 #define TIMEOUT (60)
 
-#define NOT_FOUND (-1)
+#define NOT_FOUND ((uint32_t)-1)
 #define EQUAL_STR (0)
 #define EQUAL (true)
 #define NOT_EQUAL (false)
@@ -71,12 +71,12 @@ public:
 
 struct PacketInfo
 {
-	int m_packet_number;
-	uint8_t m_reflector;
-	uint8_t m_rings[3];
+	uint32_t m_packet_number;
+	uint8_t  m_reflector;
+	uint8_t  m_rings[3];
 
-	void FromInt(int packet_number);
-	int ToInt() const;
+	void FromInt(uint32_t packet_number);
+	uint32_t ToInt() const;
 	void ToString(std::string& str) const;
 	void Increment();
 };
@@ -88,7 +88,7 @@ bool StartRecvBuffer(NetworkInfo& network_info);
 bool ContinueRecvBuffer(NetworkInfo& network_info);
 
 void SkipCharacter(NetworkInfo& network_info, char ch);
-bool ParseInt(NetworkInfo& network_info, int& result);
+bool ParseInt(NetworkInfo& network_info, uint32_t& result);
 bool ParseString(NetworkInfo& network_info, std::string& result);
 
 #endif // _COMMON_H_

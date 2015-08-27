@@ -11,7 +11,7 @@
 #include <time.h>
 
 
-void PacketInfo::FromInt(int packet_number)
+void PacketInfo::FromInt(uint32_t packet_number)
 {
 	m_packet_number = packet_number;
 	m_reflector = packet_number/(RING_COUNT*RING_COUNT*RING_COUNT); packet_number-=m_reflector*RING_COUNT*RING_COUNT*RING_COUNT;
@@ -20,7 +20,7 @@ void PacketInfo::FromInt(int packet_number)
 	m_rings[RIGHT] = packet_number;
 }
 
-int PacketInfo::ToInt() const {
+uint32_t PacketInfo::ToInt() const {
 	return m_reflector*RING_COUNT*RING_COUNT*RING_COUNT+
 	       m_rings[LEFT]*RING_COUNT*RING_COUNT+
 	       m_rings[MIDDLE]*RING_COUNT+
@@ -186,7 +186,7 @@ void SkipCharacter(NetworkInfo& network_info, char ch)
 	}
 }
 
-bool ParseInt(NetworkInfo& network_info, int& result)
+bool ParseInt(NetworkInfo& network_info, uint32_t& result)
 {
 	SkipCharacter(network_info, ' ');
 

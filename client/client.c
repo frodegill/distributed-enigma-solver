@@ -198,7 +198,7 @@ bool ParseEncryptedText(NetworkInfo& network_info)
 bool ParseSetting(NetworkInfo& network_info)
 {
 	std::string text;
-	int setting;
+	uint32_t setting;
 	if (!ParseString(network_info, text)) return false;
 
 	if (EQUAL_STR==text.compare("DONE"))
@@ -429,6 +429,15 @@ void Calculate(KeySetting& best_ring_setting, KeySetting& best_key_setting, Plug
 	do
 	{
 		key_setting.InitializeStartPosition();
+#ifdef DEBUG
+		RingSetting dummy;
+		dummy.InitializePosition();
+		uint8_t* dummy_settings_writable = const_cast<uint8_t*>(dummy.GetSettings());
+		dummy_settings_writable[LEFT] = 'Z'-'A';
+		dummy_settings_writable[MIDDLE] = 'Z'-'A';
+		dummy_settings_writable[RIGHT] = 'A'-'A';
+		key_setting.InitializeStartPosition(dummy);
+#endif
 		do
 		{
 			tmp_key_setting = key_setting;
@@ -486,8 +495,8 @@ void Calculate(KeySetting& best_ring_setting, KeySetting& best_key_setting, Plug
 				                    g_decrypt_buffer, local_ngram_score);
 				if (local_ngram_score>best_optimized_ngram_score || (local_ngram_score==best_optimized_ngram_score && local_ic_score>best_optimized_ic_score))
 				{
-					best_ic_score = local_ic_score;
-					best_ngram_score = local_ngram_score;
+					best_optimized_ic_score = local_ic_score;
+					best_optimized_ngram_score = local_ngram_score;
 					best_ring_setting = optimized_ring_setting;
 					best_key_setting = optimized_key_setting;
 					best_plugboard = plugboard;
@@ -506,7 +515,7 @@ void Calculate(KeySetting& best_ring_setting, KeySetting& best_key_setting, Plug
 					DecryptedString(decrypted_text_str);
 					fprintf(stdout, "%s-%s-%s %s-%s score %d using %s : %s\n",
 									reflector_ring_str.c_str(), ring_setting_str.c_str(), key_setting_str.c_str(), optimized_ring_setting_str.c_str(), optimized_key_setting_str.c_str(),
-									best_ngram_score, plug_str.c_str(), decrypted_text_str.c_str());
+									best_optimized_ngram_score, plug_str.c_str(), decrypted_text_str.c_str());
 				}
 			}
 

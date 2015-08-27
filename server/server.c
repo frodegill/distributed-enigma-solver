@@ -23,15 +23,16 @@ char* g_network_buffer;
 std::string g_words;
 std::string g_encrypted_text;
 
-int g_max_score = 0;
-int g_max_ring_key_settings = 0;
+uint32_t g_max_score = 0;
+uint32_t g_max_reflector_and_ring_settings = 0;
+uint32_t g_max_ring_key_settings = 0;
 std::string g_max_plugboard;
 std::string g_max_plaintext;
 
 
 struct PendingPacketInfo
 {
-	int m_reflector_and_rings_settings;
+	uint32_t m_reflector_and_rings_settings;
 	time_t m_start_time;
 };
 std::list<PendingPacketInfo> g_pending_packets;
@@ -52,7 +53,7 @@ bool ReadWordlist(const char* wordlist_filename)
 		file.close();
 		wordlist_filebuffer[wordlist_filesize] = 0;
 
-		int pos = 0;
+		size_t pos = 0;
 		//ToUpper
 		while (wordlist_filebuffer[pos])
 		{
@@ -63,7 +64,7 @@ bool ReadWordlist(const char* wordlist_filename)
 			pos++;
 		}
 
-		int length;
+		size_t length;
 		pos = 0;
 		//Parse
 		while (wordlist_filebuffer[pos])
@@ -104,7 +105,7 @@ bool ReadEncryptedText(const char* encrypted_text_filename)
 		file.close();
 		encrypted_text_filebuffer[encrypted_text_filesize] = 0;
 
-		int pos = 0;
+		size_t pos = 0;
 		//Parse
 		while (encrypted_text_filebuffer[pos])
 		{
@@ -170,7 +171,7 @@ int CreateSocket(const char* port_str) // Code based on Beej's Guide to Network 
 	return socket_fd;
 }
 
-int FindPendingPacketInfo()
+uint32_t FindPendingPacketInfo()
 {
 	time_t find_time = time(NULL) - MAX_CALC_TIME_SEC;
 	for (std::list<PendingPacketInfo>::iterator iter = g_pending_packets.begin(); iter != g_pending_packets.end(); ++iter)
@@ -184,7 +185,7 @@ int FindPendingPacketInfo()
 	return NOT_FOUND;
 }
 
-void RemovePendingPacketInfo(int reflector_and_rings_settings)
+void RemovePendingPacketInfo(uint32_t reflector_and_rings_settings)
 {
 	for (std::list<PendingPacketInfo>::iterator iter = g_pending_packets.begin(); iter != g_pending_packets.end(); ++iter)
 	{
@@ -197,7 +198,7 @@ void RemovePendingPacketInfo(int reflector_and_rings_settings)
 	}
 }
 
-void RegisterPendingPacketInfo(int reflector_and_rings_settings)
+void RegisterPendingPacketInfo(uint32_t reflector_and_rings_settings)
 {
 	time_t current_time = time(NULL);
 	for (std::list<PendingPacketInfo>::iterator iter = g_pending_packets.begin(); iter != g_pending_packets.end(); ++iter)
@@ -218,7 +219,7 @@ void RegisterPendingPacketInfo(int reflector_and_rings_settings)
 
 void SendPacket(PacketInfo& packet, NetworkInfo& network_info)
 {
-	int reflector_and_rings_settings = FindPendingPacketInfo();
+	uint32_t reflector_and_rings_settings = FindPendingPacketInfo();
 	if (NOT_FOUND == reflector_and_rings_settings)
 	{
 		packet.Increment();
@@ -328,7 +329,7 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 #endif
 
 		network_info.m_parsed_pos = 5;
-		int reflector_and_rings_settings;
+		uint32_t reflector_and_rings_settings;
 		if (!ParseInt(network_info, reflector_and_rings_settings))
 		{
 			fprintf(stdout, "Error parsing packet number\n");
@@ -339,7 +340,7 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 #endif
 		RemovePendingPacketInfo(reflector_and_rings_settings);
 		
-		int client_score;
+		uint32_t client_score;
 		if (!ParseInt(network_info, client_score))
 		{
 			fprintf(stdout, "Error parsing score\n");
@@ -401,10 +402,20 @@ void MainLoop(int socket_fd)
 #ifdef DEBUG
 		fprintf(stderr, "Closed socket %d\n", network_info.m_socket_fd);
 #endif
+
+#ifdef DEBUG
+		break;
+#endif
 	}
 }
 
 void PrintUsage()
+{
+	fprintf(stdout, "\nParameters: <path to wordlist> <path to encrypted text> [TCP/IP listening port] (default port: 2720)\n\n"
+									"Example: ./enigma-solver-server files/english_words.txt files/encrypted.txt\n\n");
+}
+
+void PrintResult()
 {
 	fprintf(stdout, "\nParameters: <path to wordlist> <path to encrypted text> [TCP/IP listening port] (default port: 2720)\n\n"
 									"Example: ./enigma-solver-server files/english_words.txt files/encrypted.txt\n\n");
@@ -458,6 +469,8 @@ int main(int argc, char* argv[])
 	fprintf(stderr, "Closed socket %d\n", socket);
 #endif	
 	delete[] g_network_buffer;
+
+	PrintResult();
 
 	return 0;
 }
