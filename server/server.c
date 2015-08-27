@@ -152,7 +152,9 @@ int CreateSocket(const char* port_str) // Code based on Beej's Guide to Network 
 
 		if (bind(socket_fd, p->ai_addr, p->ai_addrlen) < 0) {
 			close(socket_fd);
-			fprintf(stderr, "Closeded socket %d\n", socket_fd);
+#ifdef DEBUG
+			fprintf(stderr, "Closed socket %d\n", socket_fd);
+#endif
 			continue;
 		}
 		break;
@@ -257,7 +259,9 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 
 	if (EQUAL_STR == command.compare("STATUS"))
 	{
+#ifdef DEBUG
 		fprintf(stdout, "Received STATUS\n");
+#endif
 
 		network_info.SetBuffer(g_network_buffer,NETWORK_BUFFER_LENGTH);
 		sprintf(network_info.buf(), "PROGRESS %d/%d\n"\
@@ -277,11 +281,15 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 		network_info.SetBuffer(g_max_plaintext.c_str(), g_max_plaintext.length());
 		if (!ContinueSendBuffer(network_info) || 0!=network_info.m_remaining_bytes) return;
 
+#ifdef DEBUG
 		fprintf(stdout, "Handled STATUS\n");
+#endif
 	}
 	else if (EQUAL_STR == command.compare("NEW"))
 	{
+#ifdef DEBUG
 		fprintf(stdout, "Received NEW\n");
+#endif
 
 		if (0 < network_info.m_remaining_bytes)
 		{
@@ -309,11 +317,15 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 
 		SendPacket(packet_info, network_info);
 
+#ifdef DEBUG
 		fprintf(stdout, "Handled NEW\n");
+#endif
 	}
 	else if (EQUAL_STR == command.compare("DONE")) //"DONE <setting> <score> <ring/key-settings> <plugboard> <plaintext>"
 	{
+#ifdef DEBUG
 		fprintf(stdout, "Received DONE\n");
+#endif
 
 		network_info.m_parsed_pos = 5;
 		int reflector_and_rings_settings;
@@ -322,7 +334,9 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 			fprintf(stdout, "Error parsing packet number\n");
 			return;
 		}
+#ifdef DEBUG
 		fprintf(stdout, "Got reflector_ring_setting %d\n", reflector_and_rings_settings);
+#endif
 		RemovePendingPacketInfo(reflector_and_rings_settings);
 		
 		int client_score;
@@ -331,7 +345,9 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 			fprintf(stdout, "Error parsing score\n");
 			return;
 		}
+#ifdef DEBUG
 		fprintf(stdout, "Got score %d\n", client_score);
+#endif
 		if (g_max_score < client_score)
 		{
 			g_max_score = client_score;
@@ -354,7 +370,9 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 		}
 
 		SendPacket(packet_info, network_info);
+#ifdef DEBUG
 		fprintf(stdout, "Handled DONE\n");
+#endif
 	}
 	else
 	{
@@ -375,10 +393,14 @@ void MainLoop(int socket_fd)
 		fprintf(stdout, "Waiting...(%d/%d)\n", packet_info.m_packet_number, PACKET_COUNT);
 
 		network_info.m_socket_fd = accept(socket_fd, (struct sockaddr*)&their_addr, &addr_size);
+#ifdef DEBUG
 		fprintf(stdout, "Accepted socket %d\n", network_info.m_socket_fd);
+#endif
 		HandleClient(packet_info, network_info);
 		close(network_info.m_socket_fd);
+#ifdef DEBUG
 		fprintf(stderr, "Closed socket %d\n", network_info.m_socket_fd);
+#endif
 	}
 }
 
@@ -414,22 +436,27 @@ int main(int argc, char* argv[])
 		fprintf(stderr, "Initializing server failed\n");
 		return -1;
 	}
+#ifdef DEBUG
 	fprintf(stderr, "Created socket %d\n", socket);
+#endif
 
 	g_network_buffer = new char[NETWORK_BUFFER_LENGTH+1];
 	if (!g_network_buffer)
 	{
 		fprintf(stderr, "Allocating network buffer failed\n");
 		close(socket);
-		fprintf(stderr, "Closeded socket %d\n", socket);
+#ifdef DEBUG
+		fprintf(stderr, "Closed socket %d\n", socket);
+#endif
 		return -1;
 	}
 	g_network_buffer[NETWORK_BUFFER_LENGTH] = 0;
 	
 	MainLoop(socket);
 	close(socket);
-	fprintf(stderr, "Closeded socket %d\n", socket);
-	
+#ifdef DEBUG
+	fprintf(stderr, "Closed socket %d\n", socket);
+#endif	
 	delete[] g_network_buffer;
 
 	return 0;
