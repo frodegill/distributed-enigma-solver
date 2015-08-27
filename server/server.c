@@ -44,7 +44,25 @@ void PrintUsage()
 									"Example: ./enigma-solver-server files/english_words.txt files/encrypted.txt\n\n");
 }
 
-void PrintResult()
+void CompressPlugboard(const std::string& plugboard, std::string& compressed_plugboard)
+{
+	compressed_plugboard.clear();
+	compressed_plugboard += " [ ";
+	uint8_t i;
+	for (i=0; i<CHAR_COUNT; i++)
+	{
+		if (plugboard[i] > (i+'A'))
+		{
+			compressed_plugboard += (char)(i+'A');
+			compressed_plugboard += '-';
+			compressed_plugboard += (char)plugboard[i];
+			compressed_plugboard += ' ';
+		}
+	}
+	compressed_plugboard += ']';
+}
+
+void ResultString(std::string& result)
 {
 	std::string reflector_and_rings;
 	PacketInfo max_packet;
@@ -71,10 +89,26 @@ void PrintResult()
 		}
 	}
 
-	fprintf(stdout, "Best score: %d, %s-%s-%s %s %s\n",
-					g_max_score,
-					reflector_and_rings.c_str(), ring_settings.c_str(), key_settings.c_str(),
-					g_max_plugboard.c_str(), g_max_plaintext.c_str());
+	std::string compressed_plugboard;
+	CompressPlugboard(g_max_plugboard, compressed_plugboard);
+
+	char tmp_buffer[200];
+	snprintf(tmp_buffer, 200, "%d, %s-%s-%s %s ",
+					 g_max_score,
+					 reflector_and_rings.c_str(), ring_settings.c_str(), key_settings.c_str(),
+					 compressed_plugboard.c_str());
+
+	result.clear();
+	result.append(tmp_buffer);
+	result.append(g_max_plaintext);
+}
+
+void PrintResult()
+{
+	std::string result_string;
+	ResultString(result_string);
+
+	fprintf(stdout, "Best score: %s\n", result_string.c_str());
 }
 
 bool ReadWordlist(const char* wordlist_filename)
@@ -259,13 +293,23 @@ void RegisterPendingPacketInfo(uint32_t reflector_and_rings_settings)
 void SendPacket(PacketInfo& packet, NetworkInfo& network_info)
 {
 	uint32_t reflector_and_rings_settings = FindPendingPacketInfo();
-	if (NOT_FOUND == reflector_and_rings_settings)
+	if (NOT_FOUND==reflector_and_rings_settings && PACKET_COUNT<=packet.m_packet_number && 0<g_pending_packets.size())
+	{
+		size_t skips = rand()%g_pending_packets.size();
+		std::list<PendingPacketInfo>::iterator iter = g_pending_packets.begin();
+		while (0<skips--)
+			++iter;
+
+		reflector_and_rings_settings = (*iter).m_reflector_and_rings_settings;
+	}
+
+	if (NOT_FOUND == reflector_and_rings_settings && PACKET_COUNT>packet.m_packet_number)
 	{
 		packet.Increment();
 		reflector_and_rings_settings = packet.ToInt();
 	}
 
-	if (PACKET_COUNT <= packet.m_packet_number)
+	if (NOT_FOUND == reflector_and_rings_settings)
 	{
 		network_info.SetBuffer("DONE",4);
 		network_info.m_available_bytes = network_info.m_remaining_bytes = 4;
@@ -302,23 +346,20 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 #ifdef DEBUG
 		fprintf(stdout, "Received STATUS\n");
 #endif
+		std::string result_string;
+		ResultString(result_string);
 
 		network_info.SetBuffer(g_network_buffer,NETWORK_BUFFER_LENGTH);
 		sprintf(network_info.buf(), "PROGRESS %d/%d\n"\
 		                            "CLIENTS %d\n"\
-		                            "MAX_SCORE %d\n"\
-		                            "MAX_RING_KEY %d\n"\
-		                            "MAX_PLUGBOARD %s\n"\
-		                            "MAX_PLAINTEXT ",
+		                            "BEST ",
 		        packet_info.m_packet_number, PACKET_COUNT,
-		        (int)(g_pending_packets.size()),
-		        g_max_score,
-		        g_max_ring_key_settings,
-		        g_max_plugboard.c_str());
+		        (int)(g_pending_packets.size()));
 		network_info.m_available_bytes = strlen(network_info.const_buf());
-		network_info.m_remaining_bytes = network_info.m_available_bytes+g_max_plaintext.length();
+		network_info.m_remaining_bytes = network_info.m_available_bytes+result_string.length();
 		if (!StartSendBuffer(network_info)) return;
-		network_info.SetBuffer(g_max_plaintext.c_str(), g_max_plaintext.length());
+		network_info.SetBuffer(result_string.c_str(), result_string.length());
+		network_info.m_available_bytes = result_string.length();
 		if (!ContinueSendBuffer(network_info) || 0!=network_info.m_remaining_bytes) return;
 
 #ifdef DEBUG
@@ -426,7 +467,7 @@ void MainLoop(int socket_fd)
 	PacketInfo packet_info;
 	packet_info.FromInt(0);
 	NetworkInfo network_info;
-	while (PACKET_COUNT > packet_info.m_packet_number)
+	while (PACKET_COUNT>packet_info.m_packet_number || 0<g_pending_packets.size())
 	{
 		//Wait for content/connections
 		struct sockaddr_storage their_addr;
