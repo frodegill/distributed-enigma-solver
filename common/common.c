@@ -96,7 +96,9 @@ bool ContinueSendBuffer(NetworkInfo& network_info)
 			return false;
 		}
 
+#ifdef DEBUG
 		fprintf(stdout, "Sent %d of %d bytes\n", bytes_sent, (int)(network_info.m_remaining_bytes));
+#endif
 
 		total_bytes_sent += bytes_sent;
 		network_info.m_remaining_bytes -= bytes_sent;
@@ -143,7 +145,9 @@ bool ContinueRecvBuffer(NetworkInfo& network_info)
 			return false;
 		}
 
+#ifdef DEBUG
 		fprintf(stdout, "Received %d of %d bytes\n", bytes_received, (int)(network_info.m_remaining_bytes));
+#endif
 
 		total_bytes_received += bytes_received;
 		network_info.m_available_bytes += bytes_received;
@@ -158,7 +162,9 @@ bool ContinueRecvBuffer(NetworkInfo& network_info)
 			struct timespec ts;
 			ts.tv_sec = 0;
 			ts.tv_nsec = 1*1000*1000;
+#ifdef DEBUG
 			fprintf(stdout, "Sleeping 1ms\n");
+#endif
 			::nanosleep(&ts, NULL);
 		}
 	}
