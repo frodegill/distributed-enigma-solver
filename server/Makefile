@@ -5,7 +5,7 @@ all:	$(SERVER)
 .PHONY: all
 
 # source files
-DEBUG_INFO = YES
+#DEBUG_INFO = YES
 SERVER_SOURCES = server.c common.c
 SERVER_OBJECTS = $(SERVER_SOURCES:.c=.o)
 
