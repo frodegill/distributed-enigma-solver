@@ -628,16 +628,16 @@ void PrintUsage()
 
 int main(int argc, char* argv[])
 {
-	if (1 >= argc)
-	{
-		PrintUsage();
-		return -1;
-	}
-
 	if (EQUAL_STR==strcmp(argv[argc-1], "--status"))
 	{
 		g_request_status = true;
 		argc--;
+	}
+
+	if (1 >= argc)
+	{
+		PrintUsage();
+		return -1;
 	}
 
 	InitializeEnigma();
@@ -661,7 +661,7 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 	g_network_buffer[NETWORK_BUFFER_LENGTH] = 0;
-	g_reflector_ring_settings = new PacketInfo();
+	g_reflector_ring_settings = new PacketInfo(true); //We don't know/care if the server is navy or not. Just calculate whatever we're given!  :-)
 
 	MainLoop(socket);
 	if (-1 != socket)

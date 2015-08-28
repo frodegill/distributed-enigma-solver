@@ -30,28 +30,36 @@ uint32_t PacketInfo::ToInt() const {
 void PacketInfo::ToString(std::string& str) const
 {
 	str.clear();
-	str += (char)(m_reflector+'B');
-	uint8_t i;
-	for (i=0; i<ROTOR_COUNT; i++)
+	if (0 == ToInt())
 	{
-		str += (char)(m_rings[i]+'1');
+		str = "-";
+	}
+	else
+	{
+		str += (char)(m_reflector+'B');
+		uint8_t i;
+		for (i=0; i<ROTOR_COUNT; i++)
+		{
+			str += (char)(m_rings[i]+'1');
+		}
 	}
 }
 
 void PacketInfo::Increment()
 {
 	m_packet_number++;
-	
+
+	uint8_t rotors = m_is_navy ? 8 : 5;
 	bool invalid = true;
 	while (invalid)
 	{
-		if (RING_COUNT <= ++m_rings[RIGHT])
+		if (rotors <= ++m_rings[RIGHT])
 		{
 			m_rings[RIGHT] = 0;
-			if (RING_COUNT <= ++m_rings[MIDDLE])
+			if (rotors <= ++m_rings[MIDDLE])
 			{
 				m_rings[MIDDLE] = 0;
-				if (RING_COUNT <= ++m_rings[LEFT])
+				if (rotors <= ++m_rings[LEFT])
 				{
 					m_rings[LEFT] = 0;
 					m_reflector++;

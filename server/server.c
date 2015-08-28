@@ -16,9 +16,10 @@
 
 
 #define BACKLOG (10)
-#define MAX_CALC_TIME_SEC (60*60)
 
 char* g_network_buffer;
+
+bool g_is_navy = false;
 
 std::string g_words;
 std::string g_encrypted_text;
@@ -40,7 +41,7 @@ std::list<PendingPacketInfo> g_pending_packets;
 
 void PrintUsage()
 {
-	fprintf(stdout, "\nParameters: <path to wordlist> <path to encrypted text> [TCP/IP listening port] (default port: 2720)\n\n"
+	fprintf(stdout, "\nParameters: <path to wordlist> <path to encrypted text> [TCP/IP listening port] [--navy]\nDefault port is 2720. Default is 3 of 5 rotors, navy version is 3 of 8 rotors\n\n"
 									"Example: ./enigma-solver-server files/english_words.txt files/encrypted.txt\n\n");
 }
 
@@ -65,7 +66,7 @@ void CompressPlugboard(const std::string& plugboard, std::string& compressed_plu
 void ResultString(std::string& result)
 {
 	std::string reflector_and_rings;
-	PacketInfo max_packet;
+	PacketInfo max_packet(g_is_navy);
 	max_packet.FromInt(g_max_reflector_and_ring_settings);
 	max_packet.ToString(reflector_and_rings);
 
@@ -244,20 +245,6 @@ int CreateSocket(const char* port_str) // Code based on Beej's Guide to Network 
 	return socket_fd;
 }
 
-uint32_t FindPendingPacketInfo()
-{
-	time_t find_time = time(NULL) - MAX_CALC_TIME_SEC;
-	for (std::list<PendingPacketInfo>::iterator iter = g_pending_packets.begin(); iter != g_pending_packets.end(); ++iter)
-	{
-		PendingPacketInfo packet_info = *iter;
-		if (find_time > packet_info.m_start_time)
-		{
-			return packet_info.m_reflector_and_rings_settings;
-		}
-	}
-	return NOT_FOUND;
-}
-
 void RemovePendingPacketInfo(uint32_t reflector_and_rings_settings)
 {
 	for (std::list<PendingPacketInfo>::iterator iter = g_pending_packets.begin(); iter != g_pending_packets.end(); ++iter)
@@ -292,8 +279,8 @@ void RegisterPendingPacketInfo(uint32_t reflector_and_rings_settings)
 
 void SendPacket(PacketInfo& packet, NetworkInfo& network_info)
 {
-	uint32_t reflector_and_rings_settings = FindPendingPacketInfo();
-	if (NOT_FOUND==reflector_and_rings_settings && PACKET_COUNT<=packet.m_packet_number && 0<g_pending_packets.size())
+	uint32_t reflector_and_rings_settings = NOT_FOUND;
+	if (MAX_PACKET_COUNT<=packet.m_packet_number && 0<g_pending_packets.size())
 	{
 		size_t skips = rand()%g_pending_packets.size();
 		std::list<PendingPacketInfo>::iterator iter = g_pending_packets.begin();
@@ -303,7 +290,7 @@ void SendPacket(PacketInfo& packet, NetworkInfo& network_info)
 		reflector_and_rings_settings = (*iter).m_reflector_and_rings_settings;
 	}
 
-	if (NOT_FOUND == reflector_and_rings_settings && PACKET_COUNT>packet.m_packet_number)
+	if (NOT_FOUND==reflector_and_rings_settings && MAX_PACKET_COUNT>packet.m_packet_number)
 	{
 		packet.Increment();
 		reflector_and_rings_settings = packet.ToInt();
@@ -349,11 +336,14 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 		std::string result_string;
 		ResultString(result_string);
 
+		std::string packet_str;
+		packet_info.ToString(packet_str);
+
 		network_info.SetBuffer(g_network_buffer,NETWORK_BUFFER_LENGTH);
-		sprintf(network_info.buf(), "PROGRESS %d/%d\n"\
+		sprintf(network_info.buf(), "PROGRESS %s\n"\
 		                            "CLIENTS %d\n"\
 		                            "BEST ",
-		        packet_info.m_packet_number, PACKET_COUNT,
+		        packet_str.c_str(),
 		        (int)(g_pending_packets.size()));
 		network_info.m_available_bytes = strlen(network_info.const_buf());
 		network_info.m_remaining_bytes = network_info.m_available_bytes+result_string.length();
@@ -464,15 +454,18 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 
 void MainLoop(int socket_fd)
 {
-	PacketInfo packet_info;
+	PacketInfo packet_info(g_is_navy);
 	packet_info.FromInt(0);
 	NetworkInfo network_info;
-	while (PACKET_COUNT>packet_info.m_packet_number || 0<g_pending_packets.size())
+	while (MAX_PACKET_COUNT>packet_info.m_packet_number || 0<g_pending_packets.size())
 	{
+		std::string packet_str;
+		packet_info.ToString(packet_str);
+
 		//Wait for content/connections
 		struct sockaddr_storage their_addr;
 		socklen_t addr_size = sizeof their_addr;
-		fprintf(stdout, "Waiting...(%d/%d)\n", packet_info.m_packet_number, PACKET_COUNT);
+		fprintf(stdout, "Waiting...(%s/%d)\n", packet_str.c_str(), packet_info.GetPacketCount());
 
 		network_info.m_socket_fd = accept(socket_fd, (struct sockaddr*)&their_addr, &addr_size);
 #ifdef DEBUG
@@ -488,6 +481,12 @@ void MainLoop(int socket_fd)
 
 int main(int argc, char* argv[])
 {
+	if (EQUAL_STR==strcmp(argv[argc-1], "--navy"))
+	{
+		g_is_navy = true;
+		argc--;
+	}
+
 	if (2 >= argc)
 	{
 		PrintUsage();
