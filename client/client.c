@@ -314,62 +314,63 @@ uint32_t NGramScore(const uint8_t* decrypted_text)
 	return ngram_score;
 }
 
-bool OptimizeICScore(Plugboard& plugboard, uint8_t* decrypted_text_buffer, uint32_t& ic_score, uint32_t& ngram_score, bool ignore_ngram_score)
+bool OptimizeScore(Plugboard& plugboard, uint8_t* decrypted_text_buffer, uint32_t& ic_score, uint32_t& ngram_score, double& match)
 {
 	bool improved = false;
+
+	double local_match;
 	uint32_t local_ic_score;
 	uint32_t local_ngram_score;
+	Plugboard best_plugboard;
+	best_plugboard.Initialize();
+
+	uint32_t tmp_max_ic_score;
+	uint32_t tmp_max_ngram_score;
+
 	plugboard.Reset();
 	plugboard.Push();
+
+	Plugboard plugboard2;
+	plugboard2.Initialize();
 	do
 	{
-		DecryptPrecalcPlugPaths(plugboard, decrypted_text_buffer);
-
-		local_ic_score = ICScore(decrypted_text_buffer);
-		if (ic_score < local_ic_score)
+		plugboard2 = plugboard;
+		plugboard2.Reset();
+		do
 		{
-			if (ignore_ngram_score)
+			DecryptPrecalcPlugPaths(plugboard2, decrypted_text_buffer);
+
+			local_ic_score = ICScore(decrypted_text_buffer);
+			local_ngram_score = NGramScore(decrypted_text_buffer);
+			tmp_max_ic_score = MAX(ic_score,local_ic_score);
+			tmp_max_ngram_score = MAX(ngram_score,local_ngram_score);
+			local_match = (static_cast<double>(local_ic_score)/static_cast<double>(tmp_max_ic_score)) *
+			              (static_cast<double>(local_ngram_score)/static_cast<double>(tmp_max_ngram_score));
+
+			if (ic_score<local_ic_score || ngram_score<local_ngram_score || match<local_match)
 			{
-				ic_score = local_ic_score;
-				improved = true;
-				plugboard.Push();
-			}
-			else
-			{
-				local_ngram_score = NGramScore(decrypted_text_buffer);
-				if (ngram_score < local_ngram_score)
+				match = (static_cast<double>(ic_score)/static_cast<double>(tmp_max_ic_score)) *
+				        (static_cast<double>(ngram_score)/static_cast<double>(tmp_max_ngram_score));
+				if (match<local_match)
 				{
-					ic_score = local_ic_score;
-					ngram_score = local_ngram_score;
+					best_plugboard = plugboard2;
+					match = local_match;
 					improved = true;
-					plugboard.Push();
 				}
+				ic_score = tmp_max_ic_score;
+				ngram_score = tmp_max_ngram_score;
 			}
-		}
+		} while (plugboard2.SwapNext());
 	} while (plugboard.SwapNext());
-	plugboard.Pop();
-	return improved;
-}
 
-bool OptimizeNGramScore(Plugboard& plugboard, uint8_t* decrypted_text_buffer, uint32_t& ngram_score)
-{
-	bool improved = false;
-	uint32_t local_ngram_score;
-	plugboard.Reset();
-	plugboard.Push();
-	do
+	if (improved)
 	{
-		DecryptPrecalcPlugPaths(plugboard, decrypted_text_buffer);
+		plugboard = best_plugboard;
+	}
+	else{
+		plugboard.Pop();
+	}
 
-		local_ngram_score = NGramScore(decrypted_text_buffer);
-		if (ngram_score < local_ngram_score)
-		{
-			ngram_score = local_ngram_score;
-			improved = true;
-			plugboard.Push();
-		}
-	} while (plugboard.SwapNext());
-	plugboard.Pop();
 	return improved;
 }
 
@@ -424,6 +425,7 @@ void Calculate(KeySetting& best_ring_setting, KeySetting& best_key_setting, Plug
 	const uint8_t* tmp_key_settings;
 
 	uint32_t local_ic_score, local_ngram_score;
+	double local_match;
 	uint32_t best_ic_score=0, best_ngram_score=0;
 	uint32_t best_optimized_ic_score=0;
 	do
@@ -466,14 +468,8 @@ void Calculate(KeySetting& best_ring_setting, KeySetting& best_key_setting, Plug
 			plugboard.Initialize();
 
 			local_ic_score = local_ngram_score = 0;
-			if (OptimizeICScore(plugboard, g_decrypt_buffer, local_ic_score, local_ngram_score, true))
-			{
-				OptimizeICScore(plugboard, g_decrypt_buffer, local_ic_score, local_ngram_score, false);
-			}
-
-			while (OptimizeNGramScore(plugboard, g_decrypt_buffer, local_ngram_score))
-			{
-			}
+			local_match = 0.0;
+			while (OptimizeScore(plugboard, g_decrypt_buffer, local_ic_score, local_ngram_score, local_match));
 
 			if (local_ngram_score>best_ngram_score || (local_ngram_score==best_ngram_score && local_ic_score>best_ic_score))
 			{
@@ -511,7 +507,7 @@ void Calculate(KeySetting& best_ring_setting, KeySetting& best_key_setting, Plug
 			}
 
 			//Debug progress output
-			if (0==(key_setting.ToInt()&0xFF))
+			if (0==(key_setting.ToInt()&0x7F))
 			{
 				std::string reflector_ring_str, ring_setting_str, key_setting_str;
 				g_reflector_ring_settings->ToString(reflector_ring_str);

@@ -29,7 +29,7 @@ void KeySetting::InitializeStartPosition(const RingSetting& ring_setting)
 	uint8_t i;
 	for (i=0; i<ROTOR_COUNT; i++)
 	{
-		m_start_setting[i] = settings[i];
+		m_start_setting[i] = m_setting[i] = settings[i];
 	}
 }
 
