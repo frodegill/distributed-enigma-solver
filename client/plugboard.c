@@ -21,6 +21,26 @@ void Plugboard::Initialize()
 	Reset();
 }
 
+bool Plugboard::InitializeToNextPlug(const Plugboard& src)
+{
+	uint8_t i;
+	for (i=0; i<CHAR_COUNT; i++)
+	{
+		m_plugboard[i] = src.m_plugboard[i];
+		m_plugboard_backup[i] = src.m_plugboard_backup[i];
+	}
+
+	m_swapchar[0] = src.m_swapchar[0]+1;
+	if (m_swapchar[0]==src.m_swapchar[1]) m_swapchar[0]++;
+
+	m_swapchar[1] = m_swapchar[0]+1;
+	if (m_swapchar[1]==src.m_swapchar[1]) m_swapchar[1]++;
+	
+	m_swap_bflag = REVERT_NONE;
+	m_swap_history_count = 0;
+	return (CHAR_COUNT>m_swapchar[1]);
+}
+
 bool Plugboard::SwapNext()
 {
 	RevertSwapHistoryStack();

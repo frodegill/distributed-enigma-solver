@@ -27,6 +27,7 @@ class Plugboard
 {
 public:
 	void Initialize();
+	bool InitializeToNextPlug(const Plugboard& src);
 	bool SwapNext();
 	void operator=(const Plugboard& src);
 	void Push();

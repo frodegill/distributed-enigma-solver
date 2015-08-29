@@ -334,7 +334,9 @@ bool OptimizeScore(Plugboard& plugboard, uint8_t* decrypted_text_buffer, uint32_
 	plugboard2.Initialize();
 	do
 	{
-		plugboard2 = plugboard; //Second iterator goes from here and up
+		if (!plugboard2.InitializeToNextPlug(plugboard)) //Avoid swapping plugs we've already tested
+			continue;
+
 		do
 		{
 			DecryptPrecalcPlugPaths(plugboard2, decrypted_text_buffer);
