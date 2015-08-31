@@ -98,7 +98,9 @@ int CreateSocket(const char* hostname, const char* port) // Code based on Beej's
 
 		if (connect(socket_fd, p->ai_addr, p->ai_addrlen) == -1) {
 			close(socket_fd);
+#ifdef DEBUG
 			fprintf(stderr, "Closed socket %d\n", socket_fd);
+#endif
 			perror("client: connect");
 			continue;
 		}
@@ -576,7 +578,9 @@ void MainLoop(int& socket_fd)
 			}
 
 			close(socket_fd);
+#ifdef DEBUG
 			fprintf(stderr, "Closed socket %d\n", socket_fd);
+#endif
 			socket_fd = -1;
 
 			//Calculate
@@ -593,7 +597,9 @@ void MainLoop(int& socket_fd)
 				fprintf(stderr, "Connecting to server failed\n");
 				return;
 			}
+#ifdef DEBUG
 			fprintf(stderr, "Created socket %d\n", socket_fd);
+#endif
 
 			std::string plugboard_str;
 			best_plugboard.ToString(plugboard_str, false);
@@ -651,14 +657,18 @@ int main(int argc, char* argv[])
 		fprintf(stderr, "Connecting to server failed\n");
 		return -1;
 	}
+#ifdef DEBUG
 	fprintf(stderr, "Created socket %d\n", socket);
+#endif
 
 	g_network_buffer = new char[NETWORK_BUFFER_LENGTH+1];
 	if (!g_network_buffer)
 	{
 		fprintf(stderr, "Allocating network buffer failed\n");
 		close(socket);
+#ifdef DEBUG
 		fprintf(stderr, "Closeded socket %d\n", socket);
+#endif
 		return -1;
 	}
 	g_network_buffer[NETWORK_BUFFER_LENGTH] = 0;
@@ -668,7 +678,9 @@ int main(int argc, char* argv[])
 	if (-1 != socket)
 	{
 		close(socket);
+#ifdef DEBUG
 		fprintf(stderr, "Closed socket %d\n", socket);
+#endif
 	}
 
 	delete[] g_network_buffer;
