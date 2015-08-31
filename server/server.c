@@ -280,7 +280,7 @@ void RegisterPendingPacketInfo(uint32_t reflector_and_rings_settings)
 void SendPacket(PacketInfo& packet, NetworkInfo& network_info)
 {
 	uint32_t reflector_and_rings_settings = NOT_FOUND;
-	if (MAX_PACKET_COUNT<=packet.m_packet_number && 0<g_pending_packets.size())
+	if (packet.GetPacketCount()<=packet.m_packet_number && 0<g_pending_packets.size())
 	{
 		size_t skips = rand()%g_pending_packets.size();
 		std::list<PendingPacketInfo>::iterator iter = g_pending_packets.begin();
@@ -290,7 +290,7 @@ void SendPacket(PacketInfo& packet, NetworkInfo& network_info)
 		reflector_and_rings_settings = (*iter).m_reflector_and_rings_settings;
 	}
 
-	if (NOT_FOUND==reflector_and_rings_settings && MAX_PACKET_COUNT>packet.m_packet_number)
+	if (NOT_FOUND==reflector_and_rings_settings && packet.GetPacketCount()>packet.m_packet_number)
 	{
 		packet.Increment();
 		reflector_and_rings_settings = packet.ToInt();
@@ -311,6 +311,12 @@ void SendPacket(PacketInfo& packet, NetworkInfo& network_info)
 			return;
 
 		RegisterPendingPacketInfo(reflector_and_rings_settings);
+
+		PacketInfo sent_packet(g_is_navy);
+		sent_packet.FromInt(reflector_and_rings_settings);
+		std::string sent_packet_str;
+		sent_packet.ToString(sent_packet_str);
+		fprintf(stdout, "Sent packet %s\n", sent_packet_str.c_str());
 	}
 }
 
@@ -405,9 +411,13 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 			fprintf(stdout, "Error parsing packet number\n");
 			return;
 		}
-#ifdef DEBUG
-		fprintf(stdout, "Got reflector_ring_setting %d\n", reflector_and_rings_settings);
-#endif
+
+		PacketInfo received_packet(g_is_navy);
+		received_packet.FromInt(reflector_and_rings_settings);
+		std::string received_packet_str;
+		received_packet.ToString(received_packet_str);
+		fprintf(stdout, "Received packet %s\n", received_packet_str.c_str());
+
 		RemovePendingPacketInfo(reflector_and_rings_settings);
 		
 		uint32_t client_score;
@@ -456,17 +466,15 @@ void MainLoop(int socket_fd)
 {
 	PacketInfo packet_info(g_is_navy);
 	packet_info.FromInt(0);
+
+	fprintf(stdout, "Prepared %d packets. Waiting for clients..\n", packet_info.GetPacketCount());
+
 	NetworkInfo network_info;
 	while (MAX_PACKET_COUNT>packet_info.m_packet_number || 0<g_pending_packets.size())
 	{
-		std::string packet_str;
-		packet_info.ToString(packet_str);
-
 		//Wait for content/connections
 		struct sockaddr_storage their_addr;
 		socklen_t addr_size = sizeof their_addr;
-		fprintf(stdout, "Waiting...(%s/%d)\n", packet_str.c_str(), packet_info.GetPacketCount());
-
 		network_info.m_socket_fd = accept(socket_fd, (struct sockaddr*)&their_addr, &addr_size);
 #ifdef DEBUG
 		fprintf(stdout, "Accepted socket %d\n", network_info.m_socket_fd);
