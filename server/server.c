@@ -102,6 +102,7 @@ void ResultString(std::string& result)
 	result.clear();
 	result.append(tmp_buffer);
 	result.append(g_max_plaintext);
+	result += '\n';
 }
 
 void PrintResult()
@@ -340,7 +341,14 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 		fprintf(stdout, "Received STATUS\n");
 #endif
 		std::string result_string;
-		ResultString(result_string);
+		if (g_max_plaintext.empty())
+		{
+			result_string = "No results received yet\n";
+		}
+		else
+		{
+			ResultString(result_string);
+		}
 
 		std::string packet_str;
 		packet_info.ToString(packet_str);
