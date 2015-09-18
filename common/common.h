@@ -13,10 +13,9 @@
 
 #define CHAR_COUNT (26)
 
-#define REFLECTOR_COUNT (2) //B and C
+#define REFLECTOR_COUNT (3) //A, B and C
 #define ROTOR_COUNT (3) //M3
 #define RING_COUNT (8) //I, II, III, IV, V, VI, VII and VIII (Navy M3 1939+)
-#define MAX_PACKET_COUNT (REFLECTOR_COUNT*RING_COUNT*(RING_COUNT-1)*(RING_COUNT-2))
 #define LEFT (0)
 #define MIDDLE (1)
 #define RIGHT (2)
@@ -71,9 +70,6 @@ public:
 
 struct PacketInfo
 {
-	PacketInfo(bool is_navy) : m_is_navy(is_navy) {}
-
-	bool     m_is_navy;
 	uint32_t m_packet_number;
 	uint8_t  m_reflector;
 	uint8_t  m_rings[3];
@@ -81,9 +77,6 @@ struct PacketInfo
 	void FromInt(uint32_t packet_number);
 	uint32_t ToInt() const;
 	void ToString(std::string& str) const;
-	void Increment();
-
-	uint32_t GetPacketCount() const {uint32_t rotors = m_is_navy ? 8 : 5; return REFLECTOR_COUNT*rotors*(rotors-1)*(rotors-2);}
 };
 
 bool StartSendBuffer(NetworkInfo& network_info);

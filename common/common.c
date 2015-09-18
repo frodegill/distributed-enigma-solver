@@ -36,7 +36,7 @@ void PacketInfo::ToString(std::string& str) const
 	}
 	else
 	{
-		str += (char)(m_reflector+'B');
+		str += (char)(m_reflector+'A');
 		uint8_t i;
 		for (i=0; i<ROTOR_COUNT; i++)
 		{
@@ -44,32 +44,6 @@ void PacketInfo::ToString(std::string& str) const
 		}
 	}
 }
-
-void PacketInfo::Increment()
-{
-	m_packet_number++;
-
-	uint8_t rotors = m_is_navy ? 8 : 5;
-	bool invalid = true;
-	while (invalid)
-	{
-		if (rotors <= ++m_rings[RIGHT])
-		{
-			m_rings[RIGHT] = 0;
-			if (rotors <= ++m_rings[MIDDLE])
-			{
-				m_rings[MIDDLE] = 0;
-				if (rotors <= ++m_rings[LEFT])
-				{
-					m_rings[LEFT] = 0;
-					m_reflector++;
-				}
-			}
-		}
-		invalid = (m_rings[LEFT]==m_rings[MIDDLE] || m_rings[MIDDLE]==m_rings[RIGHT] || m_rings[LEFT]==m_rings[RIGHT]);
-	}
-}
-
 
 bool StartSendBuffer(NetworkInfo& network_info)
 {

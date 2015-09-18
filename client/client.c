@@ -21,9 +21,9 @@ void InitializeEnigma()
 	int overflow, reflector, ring, ch;
 
 	//Initialize reflectors
-	char reflector_defs[REFLECTOR_COUNT][CHAR_COUNT+1] = {//{"EJMZALYXVBWFCRQUONTSPIKHGD"},  // A
-	                                                      {"YRUHQSLDPXNGOKMIEBFZCWVJAT"},  // B
-	                                                      {"FVPJIAOYEDRZXWGCTKUQSBNMHL"}}; // C
+	char reflector_defs[REFLECTOR_COUNT][CHAR_COUNT+1] = {{"EJMZALYXVBWFCRQUONTSPIKHGD"},  // A
+	                                                       {"YRUHQSLDPXNGOKMIEBFZCWVJAT"},  // B
+	                                                       {"FVPJIAOYEDRZXWGCTKUQSBNMHL"}}; // C
 	for (reflector=0; reflector<REFLECTOR_COUNT; reflector++) {
 		for (overflow=0; overflow<OVERFLOW_PROTECTION; overflow++) {
 			for (ch=0; ch<CHAR_COUNT; ch++) {
@@ -215,7 +215,7 @@ bool ParseSetting(NetworkInfo& network_info)
 
 	g_reflector_ring_settings->FromInt(setting);
 
-	fprintf(stdout, "Current packet: %c %c%c%c\n", g_reflector_ring_settings->m_reflector+'B',
+	fprintf(stdout, "Current packet: %c %c%c%c\n", g_reflector_ring_settings->m_reflector+'A',
 	                                               g_reflector_ring_settings->m_rings[LEFT]+'1',
 	                                               g_reflector_ring_settings->m_rings[MIDDLE]+'1',
 	                                               g_reflector_ring_settings->m_rings[RIGHT]+'1');
@@ -672,7 +672,7 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 	g_network_buffer[NETWORK_BUFFER_LENGTH] = 0;
-	g_reflector_ring_settings = new PacketInfo(true); //We don't know/care if the server is navy or not. Just calculate whatever we're given!  :-)
+	g_reflector_ring_settings = new PacketInfo;
 
 	MainLoop(socket);
 	if (-1 != socket)

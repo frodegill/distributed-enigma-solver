@@ -19,8 +19,6 @@
 
 char* g_network_buffer;
 
-bool g_is_navy = false;
-
 std::string g_words;
 std::string g_encrypted_text;
 
@@ -31,18 +29,13 @@ std::string g_max_plugboard;
 std::string g_max_plaintext;
 
 
-struct PendingPacketInfo
-{
-	uint32_t m_reflector_and_rings_settings;
-	time_t m_start_time;
-};
-std::list<PendingPacketInfo> g_pending_packets;
+std::list<PacketInfo> g_pending_packets;
 
 
 void PrintUsage()
 {
-	fprintf(stdout, "\nParameters: <path to wordlist> <path to encrypted text> [TCP/IP listening port] [--navy]\nDefault port is 2720. Default is 3 of 5 rotors, navy version is 3 of 8 rotors\n\n"
-									"Example: ./enigma-solver-server files/english_words.txt files/encrypted.txt\n\n");
+	fprintf(stdout, "\nParameters: <rotors> <left rings> <middle rings> <right rings> <path to wordlist> <path to encrypted text> [TCP/IP listening port]\nDefault port is 2720.\n\n"
+									"Example: ./enigma-solver-server BC 12345678 12345678 12345678 files/english_words.txt files/encrypted.txt\n\n");
 }
 
 void CompressPlugboard(const std::string& plugboard, std::string& compressed_plugboard)
@@ -66,7 +59,7 @@ void CompressPlugboard(const std::string& plugboard, std::string& compressed_plu
 void ResultString(std::string& result)
 {
 	std::string reflector_and_rings;
-	PacketInfo max_packet(g_is_navy);
+	PacketInfo max_packet;
 	max_packet.FromInt(g_max_reflector_and_ring_settings);
 	max_packet.ToString(reflector_and_rings);
 
@@ -248,10 +241,10 @@ int CreateSocket(const char* port_str) // Code based on Beej's Guide to Network 
 
 void RemovePendingPacketInfo(uint32_t reflector_and_rings_settings)
 {
-	for (std::list<PendingPacketInfo>::iterator iter = g_pending_packets.begin(); iter != g_pending_packets.end(); ++iter)
+	for (std::list<PacketInfo>::iterator iter = g_pending_packets.begin(); iter != g_pending_packets.end(); ++iter)
 	{
-		PendingPacketInfo pending_packet_info = *iter;
-		if (reflector_and_rings_settings == pending_packet_info.m_reflector_and_rings_settings)
+		PacketInfo pending_packet_info = *iter;
+		if (reflector_and_rings_settings == pending_packet_info.m_packet_number)
 		{
 			g_pending_packets.erase(iter);
 			break;
@@ -259,45 +252,9 @@ void RemovePendingPacketInfo(uint32_t reflector_and_rings_settings)
 	}
 }
 
-void RegisterPendingPacketInfo(uint32_t reflector_and_rings_settings)
+void SendPacket(NetworkInfo& network_info)
 {
-	time_t current_time = time(NULL);
-	for (std::list<PendingPacketInfo>::iterator iter = g_pending_packets.begin(); iter != g_pending_packets.end(); ++iter)
-	{
-		PendingPacketInfo pending_packet_info = *iter;
-		if (reflector_and_rings_settings == pending_packet_info.m_reflector_and_rings_settings)
-		{
-			pending_packet_info.m_start_time = current_time;
-			return;
-		}
-	}
-
-	PendingPacketInfo pending_packet_info;
-	pending_packet_info.m_reflector_and_rings_settings = reflector_and_rings_settings;
-	pending_packet_info.m_start_time = current_time;
-	g_pending_packets.push_back(pending_packet_info);
-}
-
-void SendPacket(PacketInfo& packet, NetworkInfo& network_info)
-{
-	uint32_t reflector_and_rings_settings = NOT_FOUND;
-	if (packet.GetPacketCount()<=packet.m_packet_number && 0<g_pending_packets.size())
-	{
-		size_t skips = rand()%g_pending_packets.size();
-		std::list<PendingPacketInfo>::iterator iter = g_pending_packets.begin();
-		while (0<skips--)
-			++iter;
-
-		reflector_and_rings_settings = (*iter).m_reflector_and_rings_settings;
-	}
-
-	if (NOT_FOUND==reflector_and_rings_settings && packet.GetPacketCount()>packet.m_packet_number)
-	{
-		packet.Increment();
-		reflector_and_rings_settings = packet.ToInt();
-	}
-
-	if (NOT_FOUND == reflector_and_rings_settings)
+	if (g_pending_packets.empty())
 	{
 		network_info.SetBuffer("DONE",4);
 		network_info.m_available_bytes = network_info.m_remaining_bytes = 4;
@@ -305,16 +262,16 @@ void SendPacket(PacketInfo& packet, NetworkInfo& network_info)
 	}
 	else
 	{
+		PacketInfo sent_packet = *g_pending_packets.begin();
+		g_pending_packets.pop_front();
+		g_pending_packets.push_back(sent_packet);
+
 		network_info.SetBuffer(g_network_buffer,NETWORK_BUFFER_LENGTH);
-		sprintf(network_info.buf(), "SETTING %d", reflector_and_rings_settings);
+		sprintf(network_info.buf(), "SETTING %d", sent_packet.m_packet_number);
 		network_info.m_available_bytes = network_info.m_remaining_bytes = strlen(network_info.const_buf());
 		if (!StartSendBuffer(network_info) || 0!=network_info.m_remaining_bytes)
 			return;
 
-		RegisterPendingPacketInfo(reflector_and_rings_settings);
-
-		PacketInfo sent_packet(g_is_navy);
-		sent_packet.FromInt(reflector_and_rings_settings);
 		std::string sent_packet_str;
 		sent_packet.ToString(sent_packet_str);
 		fprintf(stdout, "Sent packet %s\n", sent_packet_str.c_str());
@@ -400,7 +357,7 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 		network_info.m_available_bytes = g_encrypted_text.length();
 		if (!ContinueSendBuffer(network_info) || 0!=network_info.m_remaining_bytes) return;
 
-		SendPacket(packet_info, network_info);
+		SendPacket(network_info);
 
 #ifdef DEBUG
 		fprintf(stdout, "Handled NEW\n");
@@ -420,7 +377,7 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 			return;
 		}
 
-		PacketInfo received_packet(g_is_navy);
+		PacketInfo received_packet;
 		received_packet.FromInt(reflector_and_rings_settings);
 		std::string received_packet_str;
 		received_packet.ToString(received_packet_str);
@@ -459,7 +416,7 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 			return;
 		}
 
-		SendPacket(packet_info, network_info);
+		SendPacket(network_info);
 #ifdef DEBUG
 		fprintf(stdout, "Handled DONE\n");
 #endif
@@ -472,13 +429,13 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 
 void MainLoop(int socket_fd)
 {
-	PacketInfo packet_info(g_is_navy);
+	PacketInfo packet_info;
 	packet_info.FromInt(0);
 
-	fprintf(stdout, "Prepared %d packets. Waiting for clients..\n", packet_info.GetPacketCount());
+	fprintf(stdout, "Prepared %d packets. Waiting for clients..\n", (int)g_pending_packets.size());
 
 	NetworkInfo network_info;
-	while (MAX_PACKET_COUNT>packet_info.m_packet_number || 0<g_pending_packets.size())
+	while (true) //Wait for STATUS even after all packets are completed
 	{
 		//Wait for content/connections
 		struct sockaddr_storage their_addr;
@@ -495,33 +452,85 @@ void MainLoop(int socket_fd)
 	}
 }
 
+void GeneratePendingPackets(bool enabledReflectors[REFLECTOR_COUNT], bool enabledRings[ROTOR_COUNT][RING_COUNT])
+{
+	uint8_t reflector;
+	uint8_t rings[ROTOR_COUNT];
+	for (reflector=0; REFLECTOR_COUNT>reflector; reflector++)
+	{
+		if (!enabledReflectors[reflector]) continue;
+		for (rings[LEFT]=0; RING_COUNT>rings[LEFT]; rings[LEFT]++)
+		{
+			if (!enabledRings[LEFT][rings[LEFT]]) continue;
+			for (rings[MIDDLE]=0; RING_COUNT>rings[MIDDLE]; rings[MIDDLE]++)
+			{
+				if (!enabledRings[MIDDLE][rings[MIDDLE]] || rings[LEFT]==rings[MIDDLE]) continue;
+				for (rings[RIGHT]=0; RING_COUNT>rings[RIGHT]; rings[RIGHT]++)
+				{
+					if (!enabledRings[RIGHT][rings[RIGHT]] || rings[LEFT]==rings[RIGHT] || rings[MIDDLE]==rings[RIGHT]) continue;
+
+					PacketInfo packet_info;
+					packet_info.m_reflector = reflector;
+					packet_info.m_rings[LEFT] = rings[LEFT];
+					packet_info.m_rings[MIDDLE] = rings[MIDDLE];
+					packet_info.m_rings[RIGHT] = rings[RIGHT];
+					packet_info.m_packet_number = packet_info.ToInt();
+					g_pending_packets.push_back(packet_info);
+				}
+			}
+		}
+	}
+}
+
+void ParseParameter(const char* param, const char* legal_values, bool* enabled)
+{
+	size_t i = 0;
+	while (legal_values[i])	enabled[i++] = false;
+
+	size_t j=0;
+	for (; param[j]; j++)
+	{
+		i = 0;
+		for (; legal_values[i]; i++)
+		{
+			if (param[j] == legal_values[i])
+			{
+				enabled[i] = true;
+				break;
+			}
+		}
+	}
+}
+
 int main(int argc, char* argv[])
 {
-	if (EQUAL_STR==strcmp(argv[argc-1], "--navy"))
-	{
-		g_is_navy = true;
-		argc--;
-	}
-
-	if (2 >= argc)
+	if (5 >= argc)
 	{
 		PrintUsage();
 		return -1;
 	}
 
-	if (!ReadWordlist(argv[1]))
+	bool enabledReflectors[REFLECTOR_COUNT];
+	bool enabledRings[ROTOR_COUNT][RING_COUNT];
+	ParseParameter(argv[1], "ABC", enabledReflectors);
+	ParseParameter(argv[2], "12345678", enabledRings[LEFT]);
+	ParseParameter(argv[3], "12345678", enabledRings[MIDDLE]);
+	ParseParameter(argv[4], "12345678", enabledRings[RIGHT]);
+	GeneratePendingPackets(enabledReflectors, enabledRings);
+
+	if (!ReadWordlist(argv[5]))
 	{
 		fprintf(stderr, "Reading wordlist failed\n");
 		return -1;
 	}
 
-	if (!ReadEncryptedText(argv[2]))
+	if (!ReadEncryptedText(argv[6]))
 	{
 		fprintf(stderr, "Reading encrypted text failed\n");
 		return -1;
 	}
 
-	int socket = CreateSocket(4 <= argc ? argv[3] : DEFAULT_PORT);
+	int socket = CreateSocket(8 <= argc ? argv[7] : DEFAULT_PORT);
 	if (-1 == socket)
 	{
 		fprintf(stderr, "Initializing server failed\n");
