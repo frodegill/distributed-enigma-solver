@@ -6,6 +6,7 @@ all:	$(SERVER)
 
 # source files
 #DEBUG_INFO = YES
+#PROFILE_INFO = YES
 SERVER_SOURCES = server.c common.c
 SERVER_OBJECTS = $(SERVER_SOURCES:.c=.o)
 
@@ -16,6 +17,9 @@ ifdef DEBUG_INFO
  CXXFLAGS += -g -DDEBUG
 else
  CXXFLAGS += -O3
+endif
+ifdef PROFILE_INFO
+ CXXFLAGS += -pg
 endif
 
 %.o: %.c

@@ -6,6 +6,7 @@ all:	$(CLIENT)
 
 # source files
 #DEBUG_INFO = YES
+#PROFILE_INFO = YES
 CLIENT_SOURCES = client.c keysetting.c ringsetting.c plugboard.c common.c
 CLIENT_OBJECTS = $(CLIENT_SOURCES:.c=.o)
 
@@ -16,6 +17,9 @@ ifdef DEBUG_INFO
  CXXFLAGS += -g -DDEBUG
 else
  CXXFLAGS += -O3
+endif
+ifdef PROFILE_INFO
+ CXXFLAGS += -pg
 endif
 
 %.o: %.c
