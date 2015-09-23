@@ -183,12 +183,8 @@ bool ParseEncryptedText(NetworkInfo& network_info)
 	g_encrypted_text = new uint8_t[g_encrypted_text_length];
 	g_decrypt_buffer = new uint8_t[g_encrypted_text_length];
 	g_precalc_plug_paths = new uint8_t[g_encrypted_text_length*CHAR_COUNT];
-	g_ic_score = new uint32_t[g_encrypted_text_length+1];
 
 	size_t i;
-	for (i=0; i<=g_encrypted_text_length; i++)
-		g_ic_score[i] = i*(i-1);
-
 	for (i=0; i<text.length(); i++)
 	{
 		g_encrypted_text[i] = text[i]-'A';
@@ -223,19 +219,20 @@ bool ParseSetting(NetworkInfo& network_info)
 	return (0 == network_info.m_remaining_bytes);
 }
 
-void DecryptedString(std::string& decrypted_text_str)
+void DecryptedString(std::string& decrypted_text_str, const uint8_t* buffer)
 {
 	decrypted_text_str.clear();
 	size_t i;
 	for (i=0; i<g_encrypted_text_length; i++)
 	{
-		decrypted_text_str += (char)(g_decrypt_buffer[i]+'A');
+		decrypted_text_str += (char)(buffer[i]+'A');
 	}
 }
 
-void Decrypt(const uint8_t* ring_settings, KeySetting& key_setting, const Plugboard& plugboard, uint8_t* decrypted_text_buffer)
+void Decrypt(const uint8_t* ring_settings, const KeySetting& key_setting, const Plugboard& plugboard, uint8_t* decrypted_text_buffer)
 {
-	const uint8_t* key_settings = key_setting.GetSettings();
+	KeySetting tmp_key_setting = key_setting;
+	const uint8_t* key_settings = tmp_key_setting.GetSettings();
 	const uint8_t* plugs = plugboard.GetPlugs();
 
 	int8_t ring;
@@ -243,7 +240,7 @@ void Decrypt(const uint8_t* ring_settings, KeySetting& key_setting, const Plugbo
 	size_t i;
 	for (i=0; i<g_encrypted_text_length; i++)
 	{
-		key_setting.StepRotors();
+		tmp_key_setting.StepRotors();
 
 		ch = plugs[g_encrypted_text[i]];
 
@@ -278,28 +275,6 @@ void DecryptPrecalcPlugPaths(const Plugboard& plugboard, uint8_t* decrypted_text
 	}
 }
 
-uint32_t ICScore(const uint8_t* decrypted_text)
-{
-	size_t i;
-	for (i=0; i<CHAR_COUNT; i++)
-	{
-		g_ic_charcount[i] = 0;
-	}
-
-	for (i=0; i<g_encrypted_text_length; i++)
-	{
-		g_ic_charcount[decrypted_text[i]]++;
-	}
-
-	uint32_t ic_score = 0;
-	for (i=0; i<CHAR_COUNT; i++)
-	{
-		ic_score += g_ic_score[g_ic_charcount[i]];
-	}
-
-	return ic_score;
-}
-
 uint32_t NGramScore(const uint8_t* decrypted_text)
 {
 	uint32_t ngram_score = 0;
@@ -316,25 +291,20 @@ uint32_t NGramScore(const uint8_t* decrypted_text)
 	return ngram_score;
 }
 
-bool OptimizeScore(Plugboard& plugboard, uint8_t* decrypted_text_buffer, uint32_t& ic_score, uint32_t& ngram_score, double& match)
+bool OptimizeScore(Plugboard& plugboard, uint8_t* decrypted_text_buffer, uint32_t& ngram_score)
 {
 	bool improved = false;
 
-	double local_match;
-	uint32_t local_ic_score;
 	uint32_t local_ngram_score;
 	Plugboard best_plugboard;
 	best_plugboard.Initialize();
-
-	uint32_t tmp_max_ic_score;
-	uint32_t tmp_max_ngram_score;
 
 	plugboard.Reset();
 	plugboard.Push();
 
 	Plugboard plugboard2;
 	plugboard2.Initialize();
-	do
+	while (plugboard.SwapNext())
 	{
 		if (!plugboard2.InitializeToNextPlug(plugboard)) //Avoid swapping plugs we've already tested
 			continue;
@@ -343,28 +313,15 @@ bool OptimizeScore(Plugboard& plugboard, uint8_t* decrypted_text_buffer, uint32_
 		{
 			DecryptPrecalcPlugPaths(plugboard2, decrypted_text_buffer);
 
-			local_ic_score = ICScore(decrypted_text_buffer);
 			local_ngram_score = NGramScore(decrypted_text_buffer);
-			tmp_max_ic_score = MAX(ic_score,local_ic_score);
-			tmp_max_ngram_score = MAX(ngram_score,local_ngram_score);
-			local_match = (static_cast<double>(local_ic_score)/static_cast<double>(tmp_max_ic_score)) *
-			              (static_cast<double>(local_ngram_score)/static_cast<double>(tmp_max_ngram_score));
-
-			if (ic_score<local_ic_score || ngram_score<local_ngram_score || match<local_match)
+			if (ngram_score<local_ngram_score)
 			{
-				match = (static_cast<double>(ic_score)/static_cast<double>(tmp_max_ic_score)) *
-				        (static_cast<double>(ngram_score)/static_cast<double>(tmp_max_ngram_score));
-				if (match<local_match)
-				{
-					best_plugboard = plugboard2;
-					match = local_match;
-					improved = true;
-				}
-				ic_score = tmp_max_ic_score;
-				ngram_score = tmp_max_ngram_score;
+				best_plugboard = plugboard2;
+				ngram_score = local_ngram_score;
+				improved = true;
 			}
 		} while (plugboard2.SwapNext());
-	} while (plugboard.SwapNext());
+	}
 
 	if (improved)
 	{
@@ -383,16 +340,14 @@ void OptimizeRingSetting(KeySetting& ring_setting, KeySetting& key_setting, cons
 	ring_setting.Push();
 	key_setting.Push();
 	uint32_t local_ngram_score = ngram_score;
-	KeySetting tmp_key_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
 
 	size_t step_offset;
 	for (step_offset=0; step_offset<CURRENT_OPTIMIZE; step_offset++)
 	{
-		tmp_key_setting = key_setting;
-		Decrypt(ring_setting.GetSettings(), tmp_key_setting, plugboard, decrypted_text_buffer);
+		Decrypt(ring_setting.GetSettings(), key_setting, plugboard, decrypted_text_buffer);
 
 		local_ngram_score = NGramScore(decrypted_text_buffer);
-		if (local_ngram_score > ngram_score)
+		if (ngram_score<local_ngram_score)
 		{
 			ring_setting.Push();
 			key_setting.Push();
@@ -427,10 +382,8 @@ void Calculate(KeySetting& best_ring_setting, KeySetting& best_key_setting, Plug
 	const uint8_t* ring_settings = ring_setting.GetSettings();
 	const uint8_t* tmp_key_settings;
 
-	uint32_t local_ic_score, local_ngram_score;
-	double local_match;
-	uint32_t best_ic_score=0, best_ngram_score=0;
-	uint32_t best_optimized_ic_score=0;
+	uint32_t local_ngram_score;
+	uint32_t best_ngram_score=0;
 	do
 	{
 		key_setting.InitializeStartPosition();
@@ -470,22 +423,19 @@ void Calculate(KeySetting& best_ring_setting, KeySetting& best_key_setting, Plug
 			//Initialize plugboard
 			plugboard.Initialize();
 
-			local_ic_score = local_ngram_score = 0;
-			local_match = 0.0;
-			while (OptimizeScore(plugboard, g_decrypt_buffer, local_ic_score, local_ngram_score, local_match));
+			local_ngram_score = 0;
+			while (OptimizeScore(plugboard, g_decrypt_buffer, local_ngram_score));
 
-			if (local_ngram_score>best_ngram_score || (local_ngram_score==best_ngram_score && local_ic_score>best_ic_score))
+			if (best_ngram_score<local_ngram_score)
 			{
-				best_ic_score = local_ic_score;
 				best_ngram_score = local_ngram_score;
 
 				optimized_ring_setting.CopySettings(ring_settings);
 				optimized_key_setting = key_setting;
 				OptimizeRingSetting(optimized_ring_setting, optimized_key_setting, plugboard,
 				                    g_decrypt_buffer, local_ngram_score);
-				if (local_ngram_score>best_optimized_ngram_score || (local_ngram_score==best_optimized_ngram_score && local_ic_score>best_optimized_ic_score))
+				if (local_ngram_score>best_optimized_ngram_score)
 				{
-					best_optimized_ic_score = local_ic_score;
 					best_optimized_ngram_score = local_ngram_score;
 					best_ring_setting = optimized_ring_setting;
 					best_key_setting = optimized_key_setting;
@@ -502,9 +452,10 @@ void Calculate(KeySetting& best_ring_setting, KeySetting& best_key_setting, Plug
 					plugboard.ToString(plug_str, true);
 					std::string decrypted_text_str;
 					Decrypt(optimized_ring_setting.GetSettings(), optimized_key_setting, plugboard, g_decrypt_buffer);
-					DecryptedString(decrypted_text_str);
+					DecryptedString(decrypted_text_str, g_decrypt_buffer);
 					fprintf(stdout, "%s-%s-%s %s-%s score %d using %s : %s\n",
-									reflector_ring_str.c_str(), ring_setting_str.c_str(), key_setting_str.c_str(), optimized_ring_setting_str.c_str(), optimized_key_setting_str.c_str(),
+									reflector_ring_str.c_str(), ring_setting_str.c_str(), key_setting_str.c_str(),
+									optimized_ring_setting_str.c_str(), optimized_key_setting_str.c_str(),
 									best_optimized_ngram_score, plug_str.c_str(), decrypted_text_str.c_str());
 				}
 			}
@@ -606,7 +557,7 @@ void MainLoop(int& socket_fd)
 			
 			std::string decrypted_text_str;
 			Decrypt(best_ring_setting.GetSettings(), best_key_setting, best_plugboard, g_decrypt_buffer);
-			DecryptedString(decrypted_text_str);
+			DecryptedString(decrypted_text_str, g_decrypt_buffer);
 
 			sprintf(network_info.buf(), "DONE %d %d %d %s ", g_reflector_ring_settings->ToInt(),
 							best_optimized_ngram_score, best_key_setting.ToInt(best_ring_setting), plugboard_str.c_str());
@@ -686,7 +637,6 @@ int main(int argc, char* argv[])
 	delete[] g_network_buffer;
 
 	delete g_reflector_ring_settings;
-	delete[] g_ic_score;
 	delete[] g_precalc_plug_paths;
 	delete[] g_decrypt_buffer;
 	delete[] g_encrypted_text;
