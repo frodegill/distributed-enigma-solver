@@ -274,11 +274,11 @@ void SendPacket(NetworkInfo& network_info)
 
 		std::string sent_packet_str;
 		sent_packet.ToString(sent_packet_str);
-		fprintf(stdout, "Sent packet %s\n", sent_packet_str.c_str());
+		fprintf(stdout, "Sent packet %d (%s)\n", sent_packet.m_packet_number, sent_packet_str.c_str());
 	}
 }
 
-void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
+void HandleClient(NetworkInfo& network_info)
 {
 	network_info.SetBuffer(g_network_buffer,NETWORK_BUFFER_LENGTH);
 	
@@ -307,14 +307,9 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 			ResultString(result_string);
 		}
 
-		std::string packet_str;
-		packet_info.ToString(packet_str);
-
 		network_info.SetBuffer(g_network_buffer,NETWORK_BUFFER_LENGTH);
-		sprintf(network_info.buf(), "PROGRESS %s\n"\
-		                            "CLIENTS %d\n"\
+		sprintf(network_info.buf(), "REMAINING %d\n"\
 		                            "BEST ",
-		        packet_str.c_str(),
 		        (int)(g_pending_packets.size()));
 		network_info.m_available_bytes = strlen(network_info.const_buf());
 		network_info.m_remaining_bytes = network_info.m_available_bytes+result_string.length();
@@ -429,9 +424,6 @@ void HandleClient(PacketInfo& packet_info, NetworkInfo& network_info)
 
 void MainLoop(int socket_fd)
 {
-	PacketInfo packet_info;
-	packet_info.FromInt(0);
-
 	fprintf(stdout, "Prepared %d packets. Waiting for clients..\n", (int)g_pending_packets.size());
 
 	NetworkInfo network_info;
@@ -444,7 +436,7 @@ void MainLoop(int socket_fd)
 #ifdef DEBUG
 		fprintf(stdout, "Accepted socket %d\n", network_info.m_socket_fd);
 #endif
-		HandleClient(packet_info, network_info);
+		HandleClient(network_info);
 		close(network_info.m_socket_fd);
 #ifdef DEBUG
 		fprintf(stderr, "Closed socket %d\n", network_info.m_socket_fd);
