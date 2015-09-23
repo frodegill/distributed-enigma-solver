@@ -519,7 +519,7 @@ void MainLoop(int& socket_fd)
 			return;
 		}
 
-		while (!g_done)
+		while (true)
 		{
 			network_info.SetBuffer(g_network_buffer,NETWORK_BUFFER_LENGTH);
 			if (!StartRecvBuffer(network_info) ||
@@ -533,6 +533,11 @@ void MainLoop(int& socket_fd)
 			fprintf(stderr, "Closed socket %d\n", socket_fd);
 #endif
 			socket_fd = -1;
+
+			if (g_done)
+			{
+				break;
+			}
 
 			//Calculate
 			KeySetting best_ring_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
