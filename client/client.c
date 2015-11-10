@@ -20,10 +20,141 @@ void InitializeEnigma()
 {
 	int overflow, reflector, ring, ch;
 
+	char m4_reflector_defs[M4_REFLECTOR_COUNT][CHAR_COUNT+1] = {{"ENKQAUYWJICOPBLMDXZVFTHRGS"},  // UKW-b
+	                                                            {"RDOBJNTKVEHMLFCWZAXGYIPSUQ"}}; // UKW-c
+
+	char thin_ring_defs[M4_THIN_RING_COUNT][CHAR_COUNT+1] = {{"LEYJVCNIXWPBQMDRTAKZGFUHOS"},  // Beta
+	                                                         {"FSOKANUERHMBTIYCWLQPZXVGJD"}}; // Gamma
+	char inverse_thin_ring_defs[M4_THIN_RING_COUNT][CHAR_COUNT+1] = {{"Inverse Beta              "},
+	                                                                 {"Inverse Gamma             "}};
+
+	for (ring=0; ring<M4_THIN_RING_COUNT; ring++) {
+		for (ch=0; ch<CHAR_COUNT; ch++) {
+			inverse_thin_ring_defs[ring][thin_ring_defs[ring][ch]-'A'] = 'A'+ch;
+		}
+	}
+
 	//Initialize reflectors
 	char reflector_defs[REFLECTOR_COUNT][CHAR_COUNT+1] = {{"EJMZALYXVBWFCRQUONTSPIKHGD"},  // A
-	                                                       {"YRUHQSLDPXNGOKMIEBFZCWVJAT"},  // B
-	                                                       {"FVPJIAOYEDRZXWGCTKUQSBNMHL"}}; // C
+	                                                      {"YRUHQSLDPXNGOKMIEBFZCWVJAT"},  // B, subset of UKW-b
+	                                                      {"UKW-b/Beta in B position  "},
+	                                                      {"UKW-b/Beta in C position  "},
+	                                                      {"UKW-b/Beta in D position  "},
+	                                                      {"UKW-b/Beta in E position  "},
+	                                                      {"UKW-b/Beta in F position  "},
+	                                                      {"UKW-b/Beta in G position  "},
+	                                                      {"UKW-b/Beta in H position  "},
+	                                                      {"UKW-b/Beta in I position  "},
+	                                                      {"UKW-b/Beta in J position  "},
+	                                                      {"UKW-b/Beta in K position  "},
+	                                                      {"UKW-b/Beta in L position  "},
+	                                                      {"UKW-b/Beta in M position  "},
+	                                                      {"UKW-b/Beta in N position  "},
+	                                                      {"UKW-b/Beta in O position  "},
+	                                                      {"UKW-b/Beta in P position  "},
+	                                                      {"UKW-b/Beta in Q position  "},
+	                                                      {"UKW-b/Beta in R position  "},
+	                                                      {"UKW-b/Beta in S position  "},
+	                                                      {"UKW-b/Beta in T position  "},
+	                                                      {"UKW-b/Beta in U position  "},
+	                                                      {"UKW-b/Beta in V position  "},
+	                                                      {"UKW-b/Beta in W position  "},
+	                                                      {"UKW-b/Beta in X position  "},
+	                                                      {"UKW-b/Beta in Y position  "},
+	                                                      {"UKW-b/Beta in Z position  "},
+	                                                      {"UKW-b/Gamma in A position "},
+	                                                      {"UKW-b/Gamma in B position "},
+	                                                      {"UKW-b/Gamma in C position "},
+	                                                      {"UKW-b/Gamma in D position "},
+	                                                      {"UKW-b/Gamma in E position "},
+	                                                      {"UKW-b/Gamma in F position "},
+	                                                      {"UKW-b/Gamma in G position "},
+	                                                      {"UKW-b/Gamma in H position "},
+	                                                      {"UKW-b/Gamma in I position "},
+	                                                      {"UKW-b/Gamma in J position "},
+	                                                      {"UKW-b/Gamma in K position "},
+	                                                      {"UKW-b/Gamma in L position "},
+	                                                      {"UKW-b/Gamma in M position "},
+	                                                      {"UKW-b/Gamma in N position "},
+	                                                      {"UKW-b/Gamma in O position "},
+	                                                      {"UKW-b/Gamma in P position "},
+	                                                      {"UKW-b/Gamma in Q position "},
+	                                                      {"UKW-b/Gamma in R position "},
+	                                                      {"UKW-b/Gamma in S position "},
+	                                                      {"UKW-b/Gamma in T position "},
+	                                                      {"UKW-b/Gamma in U position "},
+	                                                      {"UKW-b/Gamma in V position "},
+	                                                      {"UKW-b/Gamma in W position "},
+	                                                      {"UKW-b/Gamma in X position "},
+	                                                      {"UKW-b/Gamma in Y position "},
+	                                                      {"UKW-b/Gamma in Z position "},
+	                                                      {"UKW-c/Beta in A position  "},
+	                                                      {"UKW-c/Beta in B position  "},
+	                                                      {"UKW-c/Beta in C position  "},
+	                                                      {"UKW-c/Beta in D position  "},
+	                                                      {"UKW-c/Beta in E position  "},
+	                                                      {"UKW-c/Beta in F position  "},
+	                                                      {"UKW-c/Beta in G position  "},
+	                                                      {"UKW-c/Beta in H position  "},
+	                                                      {"UKW-c/Beta in I position  "},
+	                                                      {"UKW-c/Beta in J position  "},
+	                                                      {"UKW-c/Beta in K position  "},
+	                                                      {"UKW-c/Beta in L position  "},
+	                                                      {"UKW-c/Beta in M position  "},
+	                                                      {"UKW-c/Beta in N position  "},
+	                                                      {"UKW-c/Beta in O position  "},
+	                                                      {"UKW-c/Beta in P position  "},
+	                                                      {"UKW-c/Beta in Q position  "},
+	                                                      {"UKW-c/Beta in R position  "},
+	                                                      {"UKW-c/Beta in S position  "},
+	                                                      {"UKW-c/Beta in T position  "},
+	                                                      {"UKW-c/Beta in U position  "},
+	                                                      {"UKW-c/Beta in V position  "},
+	                                                      {"UKW-c/Beta in W position  "},
+	                                                      {"UKW-c/Beta in X position  "},
+	                                                      {"UKW-c/Beta in Y position  "},
+	                                                      {"UKW-c/Beta in Z position  "},
+	                                                      {"FVPJIAOYEDRZXWGCTKUQSBNMHL"},  // C, subset of UKW-c
+	                                                      {"UKW-c/Gamma in B position "},
+	                                                      {"UKW-c/Gamma in C position "},
+	                                                      {"UKW-c/Gamma in D position "},
+	                                                      {"UKW-c/Gamma in E position "},
+	                                                      {"UKW-c/Gamma in F position "},
+	                                                      {"UKW-c/Gamma in G position "},
+	                                                      {"UKW-c/Gamma in H position "},
+	                                                      {"UKW-c/Gamma in I position "},
+	                                                      {"UKW-c/Gamma in J position "},
+	                                                      {"UKW-c/Gamma in K position "},
+	                                                      {"UKW-c/Gamma in L position "},
+	                                                      {"UKW-c/Gamma in M position "},
+	                                                      {"UKW-c/Gamma in N position "},
+	                                                      {"UKW-c/Gamma in O position "},
+	                                                      {"UKW-c/Gamma in P position "},
+	                                                      {"UKW-c/Gamma in Q position "},
+	                                                      {"UKW-c/Gamma in R position "},
+	                                                      {"UKW-c/Gamma in S position "},
+	                                                      {"UKW-c/Gamma in T position "},
+	                                                      {"UKW-c/Gamma in U position "},
+	                                                      {"UKW-c/Gamma in V position "},
+	                                                      {"UKW-c/Gamma in W position "},
+	                                                      {"UKW-c/Gamma in X position "},
+	                                                      {"UKW-c/Gamma in Y position "},
+	                                                      {"UKW-c/Gamma in Z position "}};
+
+	int i, tmp_c;
+	for (reflector=0; reflector<M4_REFLECTOR_COUNT; reflector++) {
+		for (ring=0; ring<M4_THIN_RING_COUNT; ring++) {
+			for (i=0; i<CHAR_COUNT; i++) {
+				for (ch=0; ch<CHAR_COUNT; ch++) {
+					tmp_c = thin_ring_defs[ring][(i+ch)%26] - 'A';
+					tmp_c = m4_reflector_defs[reflector][tmp_c] - 'A';
+					tmp_c = inverse_thin_ring_defs[ring][(i+tmp_c)%26] - 'A';
+					reflector_defs[1 + reflector*M4_THIN_RING_COUNT*CHAR_COUNT + ring*CHAR_COUNT + i][ch] = tmp_c + 'A';
+				}
+			}
+		}
+	}
+
 	for (reflector=0; reflector<REFLECTOR_COUNT; reflector++) {
 		for (overflow=0; overflow<OVERFLOW_PROTECTION; overflow++) {
 			for (ch=0; ch<CHAR_COUNT; ch++) {
@@ -41,6 +172,7 @@ void InitializeEnigma()
 	                                            {"JPGVOUMFYQBENHZRDKASXLICTW"},  // VI
 	                                            {"NZJHGRCXMYSWBOUFAIVLPEKQDT"},  // VII
 	                                            {"FKQHTLXOCBJSPDZRAMEWNIUYGV"}}; // VIII
+
 	for (ring=0; ring<RING_COUNT; ring++) {
 		for (overflow=0; overflow<OVERFLOW_PROTECTION; overflow++) {
 			for (ch=0; ch<CHAR_COUNT; ch++) {

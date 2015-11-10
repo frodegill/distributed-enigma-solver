@@ -13,9 +13,11 @@
 
 #define CHAR_COUNT (26)
 
-#define REFLECTOR_COUNT (3) //A, B and C
-#define ROTOR_COUNT (3) //M3
-#define RING_COUNT (8) //I, II, III, IV, V, VI, VII and VIII (Navy M3 1939+)
+#define M4_THIN_RING_COUNT (2)  //Beta and Gamma
+#define M4_REFLECTOR_COUNT (2)  //UKW-b and UKW-c
+#define REFLECTOR_COUNT (1 + (M4_REFLECTOR_COUNT*M4_THIN_RING_COUNT*CHAR_COUNT)) //A + UKW-b/UKW-c (UKW-b/Beta and UKW-c/Gamma in first positions are compatible with M3 reflector B and C)
+#define ROTOR_COUNT (3) //M3. Extra M4 ring is handled by reflector
+#define RING_COUNT (8) //I, II, III, IV, V, VI, VII, VIII (M4 thin rings are handled by reflectors)
 #define LEFT (0)
 #define MIDDLE (1)
 #define RIGHT (2)
@@ -77,6 +79,7 @@ struct PacketInfo
 	void FromInt(uint32_t packet_number);
 	uint32_t ToInt() const;
 	void ToString(std::string& str) const;
+	void ReflectorToString(std::string& str) const;
 };
 
 bool StartSendBuffer(NetworkInfo& network_info);

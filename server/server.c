@@ -34,8 +34,8 @@ std::list<PacketInfo> g_pending_packets;
 
 void PrintUsage()
 {
-	fprintf(stdout, "\nParameters: <rotors> <left rings> <middle rings> <right rings> <path to wordlist> <path to encrypted text> [TCP/IP listening port]\nDefault port is 2720.\n\n"
-									"Example: ./enigma-solver-server BC 12345678 12345678 12345678 files/english_words.txt files/encrypted.txt\n\n");
+	fprintf(stdout, "\nParameters: <rotors (A/B/C/b/c)> [M4 thin ring (B/G)] <left rings (1/2/3/4/5/6/7/8)> <middle rings> <right rings> <path to wordlist> <path to encrypted text> [TCP/IP listening port]\nDefault port is 2720.\n\n"
+									"Example: ./enigma-solver-server bc BG 12345678 12345678 12345678 files/english_words.txt files/encrypted.txt\n\n");
 }
 
 void CompressPlugboard(const std::string& plugboard, std::string& compressed_plugboard)
@@ -474,10 +474,48 @@ void GeneratePendingPackets(bool enabledReflectors[REFLECTOR_COUNT], bool enable
 	}
 }
 
+void ParseReflectors(const char* reflectors, const char* rings, bool* enabled)
+{
+	size_t i, j, k;
+	for (i=0; REFLECTOR_COUNT>i; i++) enabled[i]=false;
+
+	i=0;
+	char ch_reflector, ch_ring;
+	while (0 != (ch_reflector=*(reflectors+i++)))
+	{
+		if ('A'==ch_reflector)
+		{
+			enabled[0] = true;
+		}
+		else if ('B'==ch_reflector)
+		{
+			enabled[1] = true;
+		}
+		else if ('C'==ch_reflector)
+		{
+			enabled[1 + M4_THIN_RING_COUNT*CHAR_COUNT + CHAR_COUNT] = true; //Skip entire UKW-b and UKW-c/Beta
+		}
+		else if ('b'==ch_reflector || 'c'==ch_reflector)
+		{
+			j = 0;
+			while (0 != (ch_ring=*(rings+j++)))
+			{
+				if ('B'==ch_ring || 'G'==ch_ring)
+				{
+					for (k=0; CHAR_COUNT>k; k++)
+					{
+						enabled[1 + (ch_reflector-'b')*M4_THIN_RING_COUNT*CHAR_COUNT + ('B'==ch_ring?0:CHAR_COUNT) + k] = true;
+					}
+				}
+			}
+		}
+	}
+}
+
 void ParseParameter(const char* param, const char* legal_values, bool* enabled)
 {
 	size_t i = 0;
-	while (legal_values[i])	enabled[i++] = false;
+	while (legal_values[i])	enabled[i++]=false;
 
 	size_t j=0;
 	for (; param[j]; j++)
@@ -496,7 +534,9 @@ void ParseParameter(const char* param, const char* legal_values, bool* enabled)
 
 int main(int argc, char* argv[])
 {
-	if (5 >= argc)
+	bool is_m4 = (2<argc && (strchr(argv[2],'B') ||strchr(argv[2],'G')));
+	
+	if ((5+(is_m4?1:0)) >= argc)
 	{
 		PrintUsage();
 		return -1;
@@ -504,25 +544,34 @@ int main(int argc, char* argv[])
 
 	bool enabledReflectors[REFLECTOR_COUNT];
 	bool enabledRings[ROTOR_COUNT][RING_COUNT];
-	ParseParameter(argv[1], "ABC", enabledReflectors);
-	ParseParameter(argv[2], "12345678", enabledRings[LEFT]);
-	ParseParameter(argv[3], "12345678", enabledRings[MIDDLE]);
-	ParseParameter(argv[4], "12345678", enabledRings[RIGHT]);
+	int param = 1;
+	if (is_m4)
+	{
+		ParseReflectors(argv[param], argv[param+1], enabledReflectors);
+		param += 2;
+	}
+	else
+	{
+		ParseParameter(argv[param++], "ABC", enabledReflectors);
+	}
+	ParseParameter(argv[param++], "12345678", enabledRings[LEFT]);
+	ParseParameter(argv[param++], "12345678", enabledRings[MIDDLE]);
+	ParseParameter(argv[param++], "12345678", enabledRings[RIGHT]);
 	GeneratePendingPackets(enabledReflectors, enabledRings);
 
-	if (!ReadWordlist(argv[5]))
+	if (!ReadWordlist(argv[param++]))
 	{
 		fprintf(stderr, "Reading wordlist failed\n");
 		return -1;
 	}
 
-	if (!ReadEncryptedText(argv[6]))
+	if (!ReadEncryptedText(argv[param++]))
 	{
 		fprintf(stderr, "Reading encrypted text failed\n");
 		return -1;
 	}
 
-	int socket = CreateSocket(8 <= argc ? argv[7] : DEFAULT_PORT);
+	int socket = CreateSocket(param < argc ? argv[param++] : DEFAULT_PORT);
 	if (-1 == socket)
 	{
 		fprintf(stderr, "Initializing server failed\n");

@@ -36,11 +36,37 @@ void PacketInfo::ToString(std::string& str) const
 	}
 	else
 	{
-		str += (char)(m_reflector+'A');
+		std::string reflector_str;
+		ReflectorToString(reflector_str);
+		str += reflector_str;
 		uint8_t i;
 		for (i=0; i<ROTOR_COUNT; i++)
 		{
 			str += (char)(m_rings[i]+'1');
+		}
+	}
+}
+
+void PacketInfo::ReflectorToString(std::string& str) const
+{
+	if (0==m_reflector)
+	{
+		str = "A";
+	}
+	else
+	{
+		uint8_t index = m_reflector-1;
+		uint8_t reflector = index/(M4_THIN_RING_COUNT*CHAR_COUNT); index-=reflector*M4_THIN_RING_COUNT*CHAR_COUNT;
+		uint8_t ring = index/CHAR_COUNT; index-=ring*CHAR_COUNT;
+		if (0==index)
+		{
+			str = (char)('B'+reflector);
+		}
+		else
+		{
+			str = (char)('b'+reflector);
+			str += (0==ring?"B":"G");
+			str += (char)('A'+index);
 		}
 	}
 }
