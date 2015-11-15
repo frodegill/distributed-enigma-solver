@@ -376,7 +376,6 @@ void HandleClient(NetworkInfo& network_info)
 		received_packet.FromInt(reflector_and_rings_settings);
 		std::string received_packet_str;
 		received_packet.ToString(received_packet_str);
-		fprintf(stdout, "Received packet %s\n", received_packet_str.c_str());
 
 		RemovePendingPacketInfo(reflector_and_rings_settings);
 		
@@ -386,9 +385,9 @@ void HandleClient(NetworkInfo& network_info)
 			fprintf(stdout, "Error parsing score\n");
 			return;
 		}
-#ifdef DEBUG
-		fprintf(stdout, "Got score %d\n", client_score);
-#endif
+
+		fprintf(stdout, "Received packet %s, score %d (max %d)\n", received_packet_str.c_str(), client_score, g_max_score);
+
 		if (g_max_score < client_score)
 		{
 			g_max_score = client_score;

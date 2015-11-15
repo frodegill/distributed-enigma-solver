@@ -11,7 +11,7 @@
 #include "common.h"
 
 #define MAX_SWAP_COUNT (6)
-#define MAX_SWAP_HISTORY_STACK_COUNT (6)
+#define MAX_SWAP_HISTORY_STACK_COUNT (26)
 
 #define MORE    (true)
 #define NO_MORE (false)

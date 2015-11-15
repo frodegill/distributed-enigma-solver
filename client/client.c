@@ -6,7 +6,6 @@
  */
 
 #include "client.h"
-#include "keysetting.h"
 #include "plugboard.h"
 #include "ringsetting.h"
 #include <arpa/inet.h>
@@ -315,8 +314,12 @@ bool ParseEncryptedText(NetworkInfo& network_info)
 	g_encrypted_text = new uint8_t[g_encrypted_text_length];
 	g_decrypt_buffer = new uint8_t[g_encrypted_text_length];
 	g_precalc_plug_paths = new uint8_t[g_encrypted_text_length*CHAR_COUNT];
+	g_ic_score = new uint32_t[g_encrypted_text_length+1];
 
 	size_t i;
+	for (i=0; i<=g_encrypted_text_length; i++)
+		g_ic_score[i] = i*(i-1);
+
 	for (i=0; i<text.length(); i++)
 	{
 		g_encrypted_text[i] = text[i]-'A';
@@ -343,10 +346,9 @@ bool ParseSetting(NetworkInfo& network_info)
 
 	g_reflector_ring_settings->FromInt(setting);
 
-	fprintf(stdout, "Current packet: %c %c%c%c\n", g_reflector_ring_settings->m_reflector+'A',
-	                                               g_reflector_ring_settings->m_rings[LEFT]+'1',
-	                                               g_reflector_ring_settings->m_rings[MIDDLE]+'1',
-	                                               g_reflector_ring_settings->m_rings[RIGHT]+'1');
+	std::string packet_str;
+	g_reflector_ring_settings->ToString(packet_str);
+	fprintf(stdout, "Current packet: %s\n", packet_str.c_str());
 
 	return (0 == network_info.m_remaining_bytes);
 }
@@ -405,6 +407,28 @@ void DecryptPrecalcPlugPaths(const Plugboard& plugboard, uint8_t* decrypted_text
 	for (i=0; i<g_encrypted_text_length; i++) {
 			decrypted_text_buffer[i] = plugs[g_precalc_plug_paths[i*CHAR_COUNT + plugs[g_encrypted_text[i]]]]; //plugboard in -> enigma -> plugboard out
 	}
+}
+
+uint32_t ICScore(const uint8_t* decrypted_text)
+{
+	size_t i;
+	for (i=0; i<CHAR_COUNT; i++)
+	{
+		g_ic_charcount[i] = 0;
+	}
+
+	for (i=0; i<g_encrypted_text_length; i++)
+	{
+		g_ic_charcount[decrypted_text[i]]++;
+	}
+
+	uint32_t ic_score = 0;
+	for (i=0; i<CHAR_COUNT; i++)
+	{
+		ic_score += g_ic_score[g_ic_charcount[i]];
+	}
+
+	return ic_score;
 }
 
 uint32_t NGramScore(const uint8_t* decrypted_text)
@@ -492,6 +516,48 @@ void OptimizeRingSetting(KeySetting& ring_setting, KeySetting& key_setting, cons
 
 	ring_setting.Pop();
 	key_setting.Pop();
+}
+
+void RegisterICScore(uint32_t score, const KeySetting& key_setting)
+{
+	size_t i;
+	for (i=IC_RESULTS_SIZE-1; i>0 && g_ic_results[i-1].m_score < score; i--)
+	{
+		g_ic_results[i].m_score = g_ic_results[i-1].m_score;
+		*g_ic_results[i].m_key_setting = *g_ic_results[i-1].m_key_setting;
+	}
+	g_ic_results[i].m_score = score;
+	*g_ic_results[i].m_key_setting = key_setting;
+}
+
+void FindBestICScores()
+{
+	size_t i;
+	for (i=0; i<IC_RESULTS_SIZE; i++)
+	{
+		g_ic_results[i].m_score = 0;
+	}
+
+	RingSetting ring_setting;
+	ring_setting.InitializePosition();
+	const uint8_t* ring_settings = ring_setting.GetSettings();
+
+	Plugboard plugboard;
+	plugboard.Initialize();
+
+	KeySetting key_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
+	uint32_t ic_score;
+	do
+	{
+		key_setting.InitializeStartPosition();
+		do
+		{
+			Decrypt(ring_settings, key_setting, plugboard, g_decrypt_buffer);
+			ic_score = ICScore(g_decrypt_buffer);
+			if (ic_score > g_ic_results[IC_RESULTS_SIZE-1].m_score)
+				RegisterICScore(ic_score, key_setting);
+		} while (key_setting.IncrementStartPosition());
+	} while (ring_setting.IncrementPosition());
 }
 
 void Calculate(KeySetting& best_ring_setting, KeySetting& best_key_setting, Plugboard& best_plugboard, uint32_t& best_optimized_ngram_score)
@@ -671,13 +737,23 @@ void MainLoop(int& socket_fd)
 				break;
 			}
 
+#if 1
+			FindBestICScores();
+			KeySetting best_ring_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
+			best_ring_setting.InitializeStartPosition();
+			KeySetting best_key_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
+			best_key_setting = *g_ic_results[0].m_key_setting;
+			Plugboard best_plugboard;
+			best_plugboard.Initialize();
+			uint32_t best_optimized_ngram_score = g_ic_results[0].m_score;
+#else
 			//Calculate
 			KeySetting best_ring_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
 			KeySetting best_key_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
 			Plugboard best_plugboard;
 			uint32_t best_optimized_ngram_score = 0;
 			Calculate(best_ring_setting, best_key_setting, best_plugboard, best_optimized_ngram_score);
-
+#endif
 			//Create socket, send result, loop and read next packet info
 			socket_fd = CreateSocket(g_hostname, g_port);
 			if (-1 == socket_fd)
@@ -737,6 +813,15 @@ int main(int argc, char* argv[])
 
 	InitializeEnigma();
 
+	g_ic_results = new ICResult[IC_RESULTS_SIZE];
+	size_t i;
+	for (i=0; i<IC_RESULTS_SIZE; i++)
+	{
+		g_ic_results[i].m_score = 0;
+		g_ic_results[i].m_key_setting = new KeySetting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
+		g_ic_results[i].m_key_setting->InitializeStartPosition();
+	}
+
 	g_hostname = argv[1];
 	g_port = (3 <= argc ? argv[2] : DEFAULT_PORT);
 	int socket = CreateSocket(g_hostname, g_port);
@@ -774,6 +859,8 @@ int main(int argc, char* argv[])
 	delete[] g_network_buffer;
 
 	delete g_reflector_ring_settings;
+	delete[] g_ic_score;
+	delete[] g_ic_results;
 	delete[] g_precalc_plug_paths;
 	delete[] g_decrypt_buffer;
 	delete[] g_encrypted_text;

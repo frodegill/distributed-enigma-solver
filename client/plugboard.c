@@ -142,6 +142,12 @@ void Plugboard::operator=(const Plugboard& src)
 	m_swap_bflag = src.m_swap_bflag;
 
 	m_swap_history_count = src.m_swap_history_count;
+#ifdef DEBUG
+	if (m_swap_history_count >= MAX_SWAP_HISTORY_STACK_COUNT)
+	{
+		fprintf(stdout, "m_swap_history_count is %d\n", (int)m_swap_history_count);
+	}
+#endif
 	for (i=0; i<m_swap_history_count; i++)
 	{
 		m_swap_history_stack[i] = src.m_swap_history_stack[i];
@@ -169,10 +175,18 @@ void Plugboard::Pop()
 
 void Plugboard::RevertSwapHistoryStack()
 {
+	if (m_swap_history_count >= MAX_SWAP_HISTORY_STACK_COUNT)
+	{
+		fprintf(stdout, "m_swap_history_count is %d\n", (int)m_swap_history_count);
+	}
 	while (1 < m_swap_history_count)
 	{
 		Swap(m_swap_history_stack[m_swap_history_count-1], m_swap_history_stack[m_swap_history_count-2], false);
 		m_swap_history_count -= 2;
+		if (m_swap_history_count >= MAX_SWAP_HISTORY_STACK_COUNT)
+		{
+			fprintf(stdout, "m_swap_history_count is %d\n", (int)m_swap_history_count);
+		}
 	}
 }
 

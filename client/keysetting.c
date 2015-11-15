@@ -23,6 +23,13 @@ void KeySetting::InitializeStartPosition()
 	}
 }
 
+void KeySetting::InitializeStartPosition(uint8_t left, uint8_t middle, uint8_t right)
+{
+	m_start_setting[LEFT] = m_setting[LEFT] = left;
+	m_start_setting[MIDDLE] = m_setting[MIDDLE] = middle;
+	m_start_setting[RIGHT] = m_setting[RIGHT] = right;
+}
+
 void KeySetting::InitializeStartPosition(const RingSetting& ring_setting)
 {
 	const uint8_t* settings = ring_setting.GetSettings();

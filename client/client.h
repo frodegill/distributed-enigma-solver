@@ -9,6 +9,7 @@
  */
 
 #include "common.h"
+#include "keysetting.h"
 
 #define FAST_WHEEL_ONLY   (CHAR_COUNT)
 #define NORMAL_OPTIMIZE   ((CHAR_COUNT-1)*FAST_WHEEL_ONLY)
@@ -19,6 +20,13 @@
 
 #define OVERFLOW_PROTECTION (5) //From n-1-1 to n+1+1, to avoid range checking when adjusting for ring- and key-setting
 #define OVERFLOW_BASE (2) //Pointer to start of middle block
+
+#define IC_RESULTS_SIZE  (10)
+
+struct ICResult {
+	uint32_t m_score;
+	KeySetting* m_key_setting;
+};
 
 
 const char* g_hostname;
@@ -44,6 +52,7 @@ uint8_t g_inverse_ring_definitions[RING_COUNT][OVERFLOW_PROTECTION*CHAR_COUNT];
 uint32_t g_ring_turnover_positions[RING_COUNT];
 
 uint32_t g_ic_charcount[CHAR_COUNT];
+ICResult* g_ic_results;
 uint32_t* g_ic_score;
 
 #endif // _CLIENT_H_

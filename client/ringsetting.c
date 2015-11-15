@@ -19,8 +19,8 @@ void RingSetting::InitializePosition()
 
 bool RingSetting::IncrementPosition()
 {
-//	return (CHAR_COUNT != ++m_setting[RIGHT]); //AAA -> AAZ
-	return false; //AAA -> AAA
+	return (CHAR_COUNT != ++m_setting[RIGHT]); //AAA -> AAZ
+//	return false; //AAA -> AAA
 }
 
 void RingSetting::ToString(std::string& str) const

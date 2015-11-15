@@ -18,6 +18,7 @@ public:
 	KeySetting(const uint32_t* ring_turnover_positions, const uint8_t* rings);
 
 	void InitializeStartPosition();
+	void InitializeStartPosition(uint8_t left, uint8_t middle, uint8_t right);
 	void InitializeStartPosition(const RingSetting& ring_setting);
 	bool IncrementStartPosition();
 	bool StepRotors();
