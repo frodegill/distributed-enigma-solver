@@ -557,7 +557,7 @@ void FindBestICScores()
 			if (ic_score > g_ic_results[IC_RESULTS_SIZE-1].m_score)
 				RegisterICScore(ic_score, key_setting);
 		} while (key_setting.IncrementStartPosition());
-	} while (ring_setting.IncrementPosition());
+	} while (ring_setting.IncrementPositionAZZ());
 }
 
 void Calculate(KeySetting& best_ring_setting, KeySetting& best_key_setting, Plugboard& best_plugboard, uint32_t& best_optimized_ngram_score)
@@ -669,7 +669,7 @@ void Calculate(KeySetting& best_ring_setting, KeySetting& best_key_setting, Plug
 			}
 
 		} while (key_setting.IncrementStartPosition());
-	} while (ring_setting.IncrementPosition());
+	} while (ring_setting.IncrementPositionAAA());
 }
 
 void MainLoop(int& socket_fd)

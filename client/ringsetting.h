@@ -15,7 +15,9 @@ class RingSetting
 {
 public:
 	void InitializePosition();
-	bool IncrementPosition();
+	bool IncrementPositionAAA();
+	bool IncrementPositionAAZ();
+	bool IncrementPositionAZZ();
 	void ToString(std::string& str) const;
 	const uint8_t* GetSettings() const {return m_setting;}
 

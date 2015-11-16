@@ -17,10 +17,24 @@ void RingSetting::InitializePosition()
 	}
 }
 
-bool RingSetting::IncrementPosition()
+bool RingSetting::IncrementPositionAAA()
+{
+	return false; //AAA -> AAA
+}
+
+bool RingSetting::IncrementPositionAAZ()
 {
 	return (CHAR_COUNT != ++m_setting[RIGHT]); //AAA -> AAZ
-//	return false; //AAA -> AAA
+}
+
+bool RingSetting::IncrementPositionAZZ()
+{
+	if (CHAR_COUNT == ++m_setting[RIGHT])
+	{
+		m_setting[RIGHT] = 0;
+		return (CHAR_COUNT != ++m_setting[MIDDLE]); //AAA -> AAZ
+	}
+	return true;
 }
 
 void RingSetting::ToString(std::string& str) const
