@@ -7,7 +7,6 @@
 
 #include "client.h"
 #include "plugboard.h"
-#include "ringsetting.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <cstdio>
@@ -518,15 +517,17 @@ void OptimizeRingSetting(KeySetting& ring_setting, KeySetting& key_setting, cons
 	key_setting.Pop();
 }
 
-void RegisterICScore(uint32_t score, const KeySetting& key_setting)
+void RegisterICScore(uint32_t score, const RingSetting& ring_setting, const KeySetting& key_setting)
 {
 	size_t i;
 	for (i=IC_RESULTS_SIZE-1; i>0 && g_ic_results[i-1].m_score < score; i--)
 	{
 		g_ic_results[i].m_score = g_ic_results[i-1].m_score;
+		*g_ic_results[i].m_ring_setting = *g_ic_results[i-1].m_ring_setting;
 		*g_ic_results[i].m_key_setting = *g_ic_results[i-1].m_key_setting;
 	}
 	g_ic_results[i].m_score = score;
+	*g_ic_results[i].m_ring_setting = ring_setting;
 	*g_ic_results[i].m_key_setting = key_setting;
 }
 
@@ -555,7 +556,7 @@ void FindBestICScores()
 			Decrypt(ring_settings, key_setting, plugboard, g_decrypt_buffer);
 			ic_score = ICScore(g_decrypt_buffer);
 			if (ic_score > g_ic_results[IC_RESULTS_SIZE-1].m_score)
-				RegisterICScore(ic_score, key_setting);
+				RegisterICScore(ic_score, ring_setting, key_setting);
 		} while (key_setting.IncrementStartPosition());
 	} while (ring_setting.IncrementPositionAZZ());
 }
@@ -740,7 +741,7 @@ void MainLoop(int& socket_fd)
 #if 1
 			FindBestICScores();
 			KeySetting best_ring_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
-			best_ring_setting.InitializeStartPosition();
+			best_ring_setting.InitializeStartPosition(*g_ic_results[0].m_ring_setting);
 			KeySetting best_key_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
 			best_key_setting = *g_ic_results[0].m_key_setting;
 			Plugboard best_plugboard;
@@ -818,6 +819,8 @@ int main(int argc, char* argv[])
 	for (i=0; i<IC_RESULTS_SIZE; i++)
 	{
 		g_ic_results[i].m_score = 0;
+		g_ic_results[i].m_ring_setting = new RingSetting;
+		g_ic_results[i].m_ring_setting->InitializePosition();
 		g_ic_results[i].m_key_setting = new KeySetting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
 		g_ic_results[i].m_key_setting->InitializeStartPosition();
 	}

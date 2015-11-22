@@ -9,6 +9,7 @@
  */
 
 #include "common.h"
+#include "ringsetting.h"
 #include "keysetting.h"
 
 #define FAST_WHEEL_ONLY   (CHAR_COUNT)
@@ -25,6 +26,7 @@
 
 struct ICResult {
 	uint32_t m_score;
+	RingSetting* m_ring_setting;
 	KeySetting* m_key_setting;
 };
 
