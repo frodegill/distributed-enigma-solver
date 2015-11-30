@@ -144,9 +144,9 @@ void InitializeEnigma()
 		for (ring=0; ring<M4_THIN_RING_COUNT; ring++) {
 			for (i=0; i<CHAR_COUNT; i++) {
 				for (ch=0; ch<CHAR_COUNT; ch++) {
-					tmp_c = thin_ring_defs[ring][(i+ch)%26] - 'A';
+					tmp_c = (thin_ring_defs[ring][(26+ch-i)%26]+26+i-'A')%26;
 					tmp_c = m4_reflector_defs[reflector][tmp_c] - 'A';
-					tmp_c = inverse_thin_ring_defs[ring][(i+tmp_c)%26] - 'A';
+					tmp_c = (inverse_thin_ring_defs[ring][(26+tmp_c-i)%26]+26+i-'A')%26;
 					reflector_defs[1 + reflector*M4_THIN_RING_COUNT*CHAR_COUNT + ring*CHAR_COUNT + i][ch] = tmp_c + 'A';
 				}
 			}
