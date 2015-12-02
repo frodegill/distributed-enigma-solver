@@ -561,6 +561,43 @@ void FindBestICScores()
 	} while (ring_setting.IncrementPositionAZZ());
 }
 
+void PrecalcPlugPaths(const uint8_t* ring_settings, KeySetting& tmp_key_setting)
+{
+	const uint8_t* tmp_key_settings = tmp_key_setting.GetSettings();
+
+	size_t encrypted_char_index;
+	for (encrypted_char_index=0; encrypted_char_index<g_encrypted_text_length; encrypted_char_index++)
+	{
+		tmp_key_setting.StepRotors();
+
+		//Precalc all paths for current encryptedCharIndex
+		uint8_t precalc_index;
+		int8_t ch;
+		int8_t ring;
+		for (precalc_index=0; precalc_index<CHAR_COUNT; precalc_index++)
+		{
+			ch = precalc_index;
+			for (ring=RIGHT; ring>=LEFT; ring--)
+			{
+				ch = g_ring_definitions[g_reflector_ring_settings->m_rings[ring]]
+																[OVERFLOW_BASE*CHAR_COUNT + ch - ring_settings[ring] + tmp_key_settings[ring]] - tmp_key_settings[ring] + ring_settings[ring];
+			}
+			
+			ch = g_reflector_definitions[g_reflector_ring_settings->m_reflector][OVERFLOW_BASE * CHAR_COUNT + ch];
+			
+			for (ring=LEFT; ring<=RIGHT; ring++)
+			{
+				ch = g_inverse_ring_definitions[g_reflector_ring_settings->m_rings[ring]]
+																				[OVERFLOW_BASE*CHAR_COUNT + ch - ring_settings[ring] + tmp_key_settings[ring]] - tmp_key_settings[ring] + ring_settings[ring];
+			}
+
+			while (ch < 0) ch += CHAR_COUNT;
+			while (ch >= CHAR_COUNT) ch -= CHAR_COUNT;
+			g_precalc_plug_paths[encrypted_char_index*CHAR_COUNT + precalc_index] = ch;
+		}
+	}
+}
+
 void Calculate(KeySetting& best_ring_setting, KeySetting& best_key_setting, Plugboard& best_plugboard, uint32_t& best_optimized_ngram_score)
 {
 	RingSetting ring_setting;
@@ -574,12 +611,7 @@ void Calculate(KeySetting& best_ring_setting, KeySetting& best_key_setting, Plug
 	KeySetting optimized_ring_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings); //Use KeySetting to get the turnover positions
 	KeySetting optimized_key_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
 
-	size_t encrypted_char_index;
-	uint8_t precalc_index;
-	int8_t ch;
-	int8_t ring;
 	const uint8_t* ring_settings = ring_setting.GetSettings();
-	const uint8_t* tmp_key_settings;
 
 	uint32_t local_ngram_score;
 	uint32_t best_ngram_score=0;
@@ -589,35 +621,7 @@ void Calculate(KeySetting& best_ring_setting, KeySetting& best_key_setting, Plug
 		do
 		{
 			tmp_key_setting = key_setting;
-			tmp_key_settings = tmp_key_setting.GetSettings();
-
-			for (encrypted_char_index=0; encrypted_char_index<g_encrypted_text_length; encrypted_char_index++)
-			{
-				tmp_key_setting.StepRotors();
-
-				//Precalc all paths for current encryptedCharIndex
-				for (precalc_index=0; precalc_index<CHAR_COUNT; precalc_index++)
-				{
-					ch = precalc_index;
-					for (ring=RIGHT; ring>=LEFT; ring--)
-					{
-						ch = g_ring_definitions[g_reflector_ring_settings->m_rings[ring]]
-						                       [OVERFLOW_BASE*CHAR_COUNT + ch - ring_settings[ring] + tmp_key_settings[ring]] - tmp_key_settings[ring] + ring_settings[ring];
-					}
-					
-					ch = g_reflector_definitions[g_reflector_ring_settings->m_reflector][OVERFLOW_BASE * CHAR_COUNT + ch];
-					
-					for (ring=LEFT; ring<=RIGHT; ring++)
-					{
-						ch = g_inverse_ring_definitions[g_reflector_ring_settings->m_rings[ring]]
-						                               [OVERFLOW_BASE*CHAR_COUNT + ch - ring_settings[ring] + tmp_key_settings[ring]] - tmp_key_settings[ring] + ring_settings[ring];
-					}
-
-					while (ch < 0) ch += CHAR_COUNT;
-					while (ch >= CHAR_COUNT) ch -= CHAR_COUNT;
-					g_precalc_plug_paths[encrypted_char_index*CHAR_COUNT + precalc_index] = ch;
-				}
-			}
+			PrecalcPlugPaths(ring_settings, tmp_key_setting);
 
 			//Initialize plugboard
 			plugboard.Initialize();
@@ -740,13 +744,37 @@ void MainLoop(int& socket_fd)
 
 #if 1
 			FindBestICScores();
+
+			uint32_t best_optimized_ngram_score=0;
 			KeySetting best_ring_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
-			best_ring_setting.InitializeStartPosition(*g_ic_results[0].m_ring_setting);
 			KeySetting best_key_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
-			best_key_setting = *g_ic_results[0].m_key_setting;
 			Plugboard best_plugboard;
-			best_plugboard.Initialize();
-			uint32_t best_optimized_ngram_score = g_ic_results[0].m_score;
+
+			size_t i;
+			for (i=0; i<IC_RESULTS_SIZE; i++)
+			{
+				const uint8_t* ring_settings = g_ic_results[i].m_ring_setting->GetSettings();
+
+				KeySetting tmp_key_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);
+				tmp_key_setting = *g_ic_results[i].m_key_setting;
+
+				PrecalcPlugPaths(ring_settings, tmp_key_setting);
+
+				//Initialize plugboard
+				Plugboard plugboard;
+				plugboard.Initialize();
+
+				uint32_t local_ngram_score = 0;
+				while (OptimizeScore(plugboard, g_decrypt_buffer, local_ngram_score));
+
+				if (local_ngram_score > best_optimized_ngram_score)
+				{
+					best_optimized_ngram_score = local_ngram_score;
+					best_ring_setting.InitializeStartPosition(*g_ic_results[i].m_ring_setting);
+					best_key_setting = *g_ic_results[i].m_key_setting;
+					best_plugboard = plugboard;
+				}
+			}
 #else
 			//Calculate
 			KeySetting best_ring_setting(g_ring_turnover_positions, g_reflector_ring_settings->m_rings);

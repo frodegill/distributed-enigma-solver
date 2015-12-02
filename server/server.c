@@ -34,8 +34,8 @@ std::list<PacketInfo> g_pending_packets;
 
 void PrintUsage()
 {
-	fprintf(stdout, "\nParameters: <rotors (A/B/C/b/c)> [M4 thin ring (B/G)] <left rings (1/2/3/4/5/6/7/8)> <middle rings> <right rings> <path to wordlist> <path to encrypted text> [TCP/IP listening port]\nDefault port is 2720.\n\n"
-									"Example: ./enigma-solver-server bc BG 12345678 12345678 12345678 files/english_words.txt files/encrypted.txt\n\n");
+	fprintf(stdout, "\nParameters: <rotors (A/B/C/b/c)> [M4 thin ring (b/g)[M4 thing ring setting (A-Z)]] <left rings (1/2/3/4/5/6/7/8)> <middle rings> <right rings> <path to wordlist> <path to encrypted text> [TCP/IP listening port]\nDefault port is 2720.\n\n"
+									"Example: ./enigma-solver-server bc bABCg 12345678 12345678 12345678 files/english_words.txt files/encrypted.txt\n\n");
 }
 
 void CompressPlugboard(const std::string& plugboard, std::string& compressed_plugboard)
@@ -499,11 +499,25 @@ void ParseReflectors(const char* reflectors, const char* rings, bool* enabled)
 			j = 0;
 			while (0 != (ch_ring=*(rings+j++)))
 			{
-				if ('B'==ch_ring || 'G'==ch_ring)
+				if ('b'==ch_ring || 'g'==ch_ring)
+				{
+					bool found_m4_ringsetting = false;
+					char ch_m4_ringsetting;
+					while ((ch_m4_ringsetting=*(rings+j)) && 'A'<=ch_m4_ringsetting && 'Z'>=ch_m4_ringsetting)
+					{
+						found_m4_ringsetting = true;
+						enabled[1 + (ch_reflector-'b')*M4_THIN_RING_COUNT*CHAR_COUNT + ('b'==ch_ring?0:CHAR_COUNT) + (ch_m4_ringsetting-'A')] = true;
+						j++;
+					}
+
+					if (found_m4_ringsetting)
+						continue;
+				}
+				if ('b'==ch_ring || 'g'==ch_ring)
 				{
 					for (k=0; CHAR_COUNT>k; k++)
 					{
-						enabled[1 + (ch_reflector-'b')*M4_THIN_RING_COUNT*CHAR_COUNT + ('B'==ch_ring?0:CHAR_COUNT) + k] = true;
+						enabled[1 + (ch_reflector-'b')*M4_THIN_RING_COUNT*CHAR_COUNT + ('b'==ch_ring?0:CHAR_COUNT) + k] = true;
 					}
 				}
 			}
@@ -533,7 +547,7 @@ void ParseParameter(const char* param, const char* legal_values, bool* enabled)
 
 int main(int argc, char* argv[])
 {
-	bool is_m4 = (2<argc && (strchr(argv[2],'B') ||strchr(argv[2],'G')));
+	bool is_m4 = (2<argc && (strchr(argv[2],'b') ||strchr(argv[2],'g')));
 	
 	if ((5+(is_m4?1:0)) >= argc)
 	{
